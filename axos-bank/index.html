@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | Axos Bank</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --axos-blue:#003B6F;--axos-gold:#B8941F;--axos-bg:#0B1626;--axos-card:#0F1D32;--axos-border:rgba(122,180,255,.12);
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:780px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.cat-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
+.cat-bar div{height:100%}
+.cat-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
+.guest-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.guest-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--axos-blue),#0055A4);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.guest-name{font-size:17px;font-weight:700}.guest-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.guest-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(184,148,31,.15);color:var(--axos-gold);border:1px solid rgba(184,148,31,.25)}
+/* Content cards for ranking */
+.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.content-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.content-card.winner .content-rank{color:var(--teal)}
+.content-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.content-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-heloc{background:rgba(0,201,167,.15);color:var(--teal)}
+.src-axos1{background:rgba(79,140,255,.15);color:var(--blue)}
+.src-cd{background:rgba(255,188,87,.15);color:var(--amber)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+/* Revenue stage */
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+/* ── ARCHITECTURE ── */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+/* Feature serving */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Axos mobile mockup */
+.axos-phone{background:var(--axos-bg);border-radius:22px;border:2px solid #1a2a40;overflow:hidden;position:relative;max-width:100%}
+.axos-topnav{padding:18px 22px 14px;display:flex;align-items:center;justify-content:space-between;background:var(--axos-blue);border-bottom:1px solid rgba(255,255,255,.05)}
+.axos-logo{font-size:15px;font-weight:800;letter-spacing:.5px;color:#fff}
+.axos-logo span{color:var(--axos-gold)}
+.axos-avatar{width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
+.axos-greeting{padding:18px 22px 8px;font-size:13px;color:var(--text2);font-weight:500}
+.axos-greeting strong{color:#fff}
+.axos-hero{margin:4px 22px 16px;padding:20px;border-radius:14px;background:linear-gradient(135deg,var(--axos-blue),#0055A4);border:1px solid rgba(184,148,31,.15)}
+.axos-hero-label{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:8px;font-family:var(--mono)}
+.axos-hero-value{font-family:var(--mono);font-size:30px;font-weight:700;color:#fff;line-height:1;margin-bottom:6px}
+.axos-hero-change{font-size:11px;color:var(--axos-gold);font-weight:600}
+.axos-section-title{padding:0 22px 10px;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);font-family:var(--mono);margin-top:4px}
+.axos-acct-list{padding:0 22px;display:flex;flex-direction:column;gap:8px}
+.axos-acct{padding:13px 15px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:between;gap:10px}
+.axos-acct-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:var(--mono);flex-shrink:0}
+.axos-acct-info{flex:1}
+.axos-acct-name{font-size:12px;font-weight:600;color:#fff;margin-bottom:2px}
+.axos-acct-num{font-size:10px;color:var(--text3);font-family:var(--mono)}
+.axos-acct-bal{font-family:var(--mono);font-size:13px;font-weight:700;color:#fff;text-align:right}
+.axos-nba{margin:18px 22px 22px;padding:16px;border-radius:12px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.2)}
+.axos-nba-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--teal);margin-bottom:6px;font-family:var(--mono)}
+.axos-nba-title{font-size:13px;font-weight:700;color:#fff;margin-bottom:4px}
+.axos-nba-desc{font-size:11px;color:var(--text2);line-height:1.4}
+/* Generic (slow) variant */
+.axos-phone.slow{border-color:#2a2a2a}
+.axos-phone.slow .axos-topnav{background:#1a1a1a}
+.axos-phone.slow .axos-hero{background:#161616;border-color:rgba(255,255,255,.04)}
+.axos-phone.slow .axos-hero-value{color:var(--text3)}
+.axos-phone.slow .axos-hero-change{color:var(--text3)}
+.axos-spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(255,255,255,.1);border-top-color:var(--text3);border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.axos-loading{font-family:var(--mono);font-size:11px;color:var(--text3);padding:10px 0}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+/* Nav */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | Axos Bank</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Session Start</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Ranking</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Business Impact</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Axos Bank's Unified Account Data Layer</div><div class="stage-subtitle">Five tiers, deployed on-prem on Axos's existing Linux infrastructure. Core banking, brokerage, and enrollment data from acquired institutions feed Redis. Redis assembles the unified account view. Axos ONE renders it in under 200 milliseconds, every time.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources (Disparate Cores)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>SQL Server</h4><p>Core banking ledger</p></div>
+<div class="arch-node"><h4>Axos Invest DB</h4><p>Brokerage positions</p></div>
+<div class="arch-node"><h4>Enrollment Core</h4><p>Acquired institution data</p></div>
+<div class="arch-node"><h4>Databricks Lakehouse</h4><p>Loan / deposit features</p></div>
+<div class="arch-node"><h4>Kafka / RTP Events</h4><p>Payment + transaction stream</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>CDC from SQL Server, Invest DB, enrollment core. Sub-second sync, automated write-back</p></div>
+<div class="arch-node"><h4>FeatureForm</h4><p>Feature engineering from Databricks + Kafka</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (On-Prem, Active-Active)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms account reads, live session state</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, full transaction history, statements</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">JSON Profiles</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Streams</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Session State</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Account Assembler</h4><p>Unified balance + net worth composition</p></div>
+<div class="arch-node"><h4>Rules / Eligibility</h4><p>Suppression, compliance, KYC state</p></div>
+<div class="arch-node"><h4>NBA Ranker</h4><p>Cross-sell scoring, LTV weighting</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Product + offer matching</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Axos ONE Mobile</h4><p>Unified dashboard, sub-200ms render</p></div>
+<div class="arch-node"><h4>Axos.com Web</h4><p>Desktop banking experience</p></div>
+<div class="arch-node"><h4>Axos Invest</h4><p>Brokerage + robo-advisory</p></div>
+<div class="arch-node"><h4>Zenith / Commercial</h4><p>HNW + business banking</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Session exhaust &rarr; Kafka &rarr; Databricks training &rarr; Updated NBA models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Dashboard Load Time Target</div><div class="arch-callout-value teal">&lt;200 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Deployment Model</div><div class="arch-callout-value orange">100% on-prem, 6 Linux nodes</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Scale Target</div><div class="arch-callout-value amber">600K &rarr; 2M+ customers</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: SESSION START ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Session Start</div><div class="stage-title">Elena opens the Axos ONE app</div><div class="stage-subtitle">A session event fires the moment Axos ONE launches. Redis identifies a high-value multi-product customer and starts assembling her unified account view before the home screen paints.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Customer Session Event</div>
+<div class="guest-card"><div class="guest-avatar">EV</div><div><div class="guest-name">Elena Vargas</div><div class="guest-detail">Axos ONE + Axos Invest + legacy acquired account | Customer since 2019 | Top 12% deposit base</div></div><div class="guest-badge">HIGH VALUE</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">axos_one_session_start</span></div>
+<div class="data-row"><span class="data-label">Time</span><span class="data-value orange">9:14 AM Sunday (planning window)</span></div>
+<div class="data-row"><span class="data-label">Device</span><span class="data-value">iOS 18 | Axos ONE v8.4</span></div>
+<div class="data-row"><span class="data-label">Product holdings</span><span class="data-value">Checking, HY Savings, Axos Invest, legacy CD</span></div>
+<div class="data-row"><span class="data-label">Deposit balance</span><span class="data-value teal">$184,200 across 4 accounts</span></div>
+<div class="data-row"><span class="data-label">Sessions last 30 days</span><span class="data-value">11 (above median)</span></div>
+<div class="data-row"><span class="data-label">Last session</span><span class="data-value red">Abandoned at 7.2s dashboard load</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Matters</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Elena holds <strong style="color:var(--teal)">$184K in deposits</strong> across four Axos products. She is exactly the customer Axos acquires through M&amp;A and monetizes through cross-sell.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Her Axos Invest account sits on a <strong style="color:var(--amber)">different core</strong> than her checking. Her legacy CD came from an <strong style="color:var(--amber)">acquired institution</strong> on a third system. Every time she opens the app, the dashboard has to fan out across all three and aggregate.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--orange)">The opportunity:</strong> Elena is on the phone with a financial planner in 12 minutes. If the unified view loads in 180ms instead of 8 seconds, she stays engaged, sees the cross-sell, and deepens the relationship.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> Elena sees a spinner for 8 seconds while Axos ONE makes synchronous calls to 3 different core systems. She abandons. The planning call happens with her net worth quoted from Fidelity instead.</div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Axos's disparate cores flow into Redis</div><div class="stage-subtitle">RDI uses change data capture to continuously sync every acquired core into Redis. Featureform orchestrates ML features from Databricks and Kafka. One unified ingest layer. Zero nightly batch. Zero custom .NET sync code.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">FeatureForm</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#4F8CFF">MSSQL</div><div><div class="flow-source">SQL Server &middot; Core Banking Ledger</div><div class="flow-detail">Checking, HY Savings, account balances, transaction history | Primary .NET back-end</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">INV</div><div><div class="flow-source">Axos Invest Database</div><div class="flow-detail">Brokerage positions, robo-advisory portfolios, cash sweep balances | Separate core</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:var(--orange)">ENRL</div><div><div class="flow-source">Enrollment Core (Acquired)</div><div class="flow-detail">Legacy CD, money market, and savings from prior acquisitions | Third core system</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,56,33,.12);color:#FF3621">DBX</div><div><div class="flow-source">Databricks Lakehouse</div><div class="flow-detail">Customer features, LTV score, churn risk, credit utilization | Refreshed every 4 hours</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">KFK</div><div><div class="flow-source">Kafka &middot; RTP / FedNow Stream</div><div class="flow-detail">Real-time payment events, ACH notifications, login telemetry, session signals</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+<div class="data-row"><span class="data-label">SQL Server sync</span><span class="data-value teal">&lt;500ms lag</span></div>
+<div class="data-row"><span class="data-label">Invest DB sync</span><span class="data-value teal">Streaming</span></div>
+<div class="data-row"><span class="data-label">Enrollment core sync</span><span class="data-value teal">Event-driven</span></div>
+<div class="data-row"><span class="data-label">Write-back enabled</span><span class="data-value teal">Yes (no custom code)</span></div>
+<div class="data-row"><span class="data-label">Deployment</span><span class="data-value orange">On-prem, Axos datacenter</span></div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Elena's unified customer 360 + live session signals</div><div class="stage-subtitle">Redis assembles the full picture: every account across every core, every product she holds, every signal from her current session. Siloed data becomes a single operational view in memory.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Customer 360 (Unified)</div>
+<div style="margin-bottom:14px">
+<div class="data-label" style="margin-bottom:8px;font-size:12px">Deposit + Investment Composition</div>
+<div class="cat-bar"><div style="width:38%;background:var(--teal)"></div><div style="width:27%;background:var(--blue)"></div><div style="width:20%;background:var(--amber)"></div><div style="width:15%;background:var(--purple)"></div></div>
+<div class="cat-label"><span>HY Savings 38%</span><span>Invest 27%</span><span>Legacy CD 20%</span><span>Checking 15%</span></div>
+</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Total net position</span><span class="data-value teal">$184,200</span></div>
+<div class="data-row"><span class="data-label">Tenure</span><span class="data-value">6.3 years (since 2019)</span></div>
+<div class="data-row"><span class="data-label">Legacy CD maturity</span><span class="data-value amber">18 days (rollover decision)</span></div>
+<div class="data-row"><span class="data-label">LTV percentile (Databricks)</span><span class="data-value teal">Top 12%</span></div>
+<div class="data-row"><span class="data-label">Credit profile</span><span class="data-value">FICO 782, no HELOC</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Situational Context (Live)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Current session intent</span><span class="data-value orange">Net worth review</span></div>
+<div class="data-row"><span class="data-label">Last 7 days activity</span><span class="data-value">3 Axos Invest logins, 2 transfers</span></div>
+<div class="data-row"><span class="data-label">Incoming payroll</span><span class="data-value teal">$8,400 ACH Friday</span></div>
+<div class="data-row"><span class="data-label">Home value (Yodlee)</span><span class="data-value blue">$612,000 (equity rich)</span></div>
+<div class="data-row"><span class="data-label">External accts linked</span><span class="data-value">Fidelity, Chase (aggregated)</span></div>
+<div class="data-row"><span class="data-label">Rate environment</span><span class="data-value amber">5yr CD at 4.85% APY</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--blue)">Context signal:</strong> Equity-rich homeowner with legacy CD maturing in 18 days, actively engaged with Axos Invest. Prime window for HELOC offer and rate-matched CD ladder conversation.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the NBA ranker</div><div class="stage-subtitle">Featureform pulls every signal the Next Best Action model needs into a single vector. Account features, customer features, and session features merge in sub-millisecond. No fan-out calls to the cores during decisioning.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">CUSTOMER_PRODUCT_VECTOR</div><div class="feat-desc">Product holdings across all cores, weighted by balance and tenure</div><div class="feat-value-row"><span class="feat-value">[0.38, 0.27, 0.20, 0.15]</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">LTV_SCORE_512D</div><div class="feat-desc">Databricks-trained lifetime value embedding, includes cross-sell propensity</div><div class="feat-value-row"><span class="feat-value">[0.91, -0.22, 0.47, ...]</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">CD_MATURITY_WINDOW_DAYS</div><div class="feat-desc">Days until legacy CD matures, triggers rollover eligibility</div><div class="feat-value-row"><span class="feat-value">18</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">HOME_EQUITY_RATIO</div><div class="feat-desc">Yodlee home value vs lien balance, drives HELOC qualification</div><div class="feat-value-row"><span class="feat-value">0.82 (equity rich)</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">SESSION_INTENT_SCORE</div><div class="feat-desc">Live classification of current session from Kafka stream</div><div class="feat-value-row"><span class="feat-value">net_worth_review</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">DEPOSIT_CHURN_RISK</div><div class="feat-desc">Rolling 30-day churn probability from Databricks model</div><div class="feat-value-row"><span class="feat-value">0.08 (low)</span><span class="feat-latency">0.4 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0">
+<div class="viz-panel-title">Feature Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center">
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Total Features Hydrated</div><div style="font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono)">187</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">1.8 ms</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Online / Offline Parity</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Cache Hit Rate</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">99.8%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: RANKING ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Next Best Action Ranking</div><div class="stage-title">Cross-sell offers scored and ranked in real time</div><div class="stage-subtitle">Vector Search matches Elena's customer embedding against the Axos product catalog. Eligibility rules suppress anything she already holds or cannot qualify for. The ranker weights by revenue, relevance, and timing.</div><span class="component-tag">Vector Search</span><span class="component-tag">NBA Ranker</span><span class="component-tag">Rules Engine</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">24 eligible products</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:12px;color:var(--blue)">8 held (suppressed)</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">3 disqualified (compliance)</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 3 surfaced to dashboard</div>
+</div>
+<div class="content-grid">
+<div class="content-card winner"><div class="content-rank">#1 Hero Offer</div><div class="content-source src-heloc">HELOC</div><div class="content-title">Home Equity Line of Credit</div><div class="content-meta">Lending | Up to $250K | 94% match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Equity-rich homeowner, FICO 782, no existing HELOC. Rate-competitive vs peer banks. High NII contribution.</div><div class="score-bar"><div class="score-fill" style="--score:94%;background:var(--teal)"></div></div><div class="score-label"><span>NBA Score</span><span style="color:var(--teal)">94%</span></div></div>
+<div class="content-card"><div class="content-rank">#2 Rollover Action</div><div class="content-source src-cd">CD LADDER</div><div class="content-title">5yr CD at 4.85% APY</div><div class="content-meta">Deposits | $36,800 maturing | 88% match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Legacy CD matures in 18 days. Prevent run-off to competitor. Maintains deposit base for NII funding.</div><div class="score-bar"><div class="score-fill" style="--score:88%;background:var(--orange)"></div></div><div class="score-label"><span>NBA Score</span><span style="color:var(--orange)">88%</span></div></div>
+<div class="content-card"><div class="content-rank">#3 Upgrade Path</div><div class="content-source src-axos1">AXOS ONE</div><div class="content-title">Axos ONE Premier Tier</div><div class="content-meta">Relationship | +0.25% APY | 82% match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Meets Premier balance threshold. Deepens relationship, adds rate benefit, locks in cross-product engagement.</div><div class="score-bar"><div class="score-fill" style="--score:82%;background:var(--blue)"></div></div><div class="score-label"><span>NBA Score</span><span style="color:var(--blue)">82%</span></div></div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 7: BUSINESS IMPACT ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Business Impact</div><div class="stage-title">Latency fix meets deposit retention meets cross-sell uplift</div><div class="stage-subtitle">The 40x dashboard speedup is the headline, but the compounding value is deposit retention and NBA conversion. Every abandoned session is a missed cross-sell and an at-risk deposit. Every fast session is a chance to deepen the relationship.</div><span class="component-tag">Redis Enterprise</span><span class="component-tag">NBA Ranker</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Revenue &amp; Retention Logic</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Dashboard load time</span><span class="data-value teal">8.0s &rarr; 180ms (40x faster)</span></div>
+<div class="data-row"><span class="data-label">Session abandonment reduction</span><span class="data-value teal">~31% fewer abandoned mobile sessions</span></div>
+<div class="data-row"><span class="data-label">Deposit retention uplift</span><span class="data-value amber">Protects $20.8B deposit base cost of funds</span></div>
+<div class="data-row"><span class="data-label">NBA conversion rate (personalized)</span><span class="data-value teal">3.2x vs generic offer banner</span></div>
+<div class="data-row"><span class="data-label">Infrastructure cost takeout</span><span class="data-value teal">Replaces custom .NET sync code + cache pool</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> Axos's NIM of 4.84% is funded by a $20.8B deposit base. Every customer who abandons the app is a customer who might move deposits elsewhere. Fixing the 8-second dashboard is not a UX project. It is a cost-of-funds project.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Projected Session Impact</div>
+<div class="rev-compare">
+<div class="rev-card before"><div class="rev-value" style="color:var(--text3)">8.0s</div><div class="rev-label">Generic dashboard<br>Elena abandons</div></div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">180ms</div><div class="rev-label">Unified view<br>Elena converts</div></div>
+</div>
+<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">At Axos scale (<strong style="color:var(--text)">600K &rarr; 2M+ customers</strong>), session retention and cross-sell conversion compound into meaningful deposit growth and NII expansion.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Same app. Same logo. Instant unified view.</div><div class="stage-subtitle">The Axos ONE dashboard does not change visually. What changes is what the app can do at session start. The old architecture fans out across three cores and waits. The Redis architecture serves the unified view from memory, along with the right cross-sell offer.</div></div>
+<div class="outcome-split">
+<!-- GENERIC -->
+<div class="outcome-col">
+<div class="outcome-header generic">Current State (8s Load)</div>
+<div class="axos-phone slow">
+<div class="axos-topnav"><div class="axos-logo">AXOS<span>ONE</span></div><div class="axos-avatar">EV</div></div>
+<div class="axos-greeting">Good morning, <strong>Elena</strong></div>
+<div class="axos-hero">
+<div class="axos-hero-label">Total Net Position</div>
+<div class="axos-hero-value"><span class="axos-spinner"></span>Loading...</div>
+<div class="axos-hero-change">Aggregating 3 core systems</div>
+</div>
+<div class="axos-section-title">Your Accounts</div>
+<div class="axos-acct-list">
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(255,255,255,.05);color:var(--text3)">CHK</div><div class="axos-acct-info"><div class="axos-acct-name" style="color:var(--text3)">Checking</div><div class="axos-acct-num">Loading...</div></div><div class="axos-acct-bal" style="color:var(--text3)">- -</div></div>
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(255,255,255,.05);color:var(--text3)">SAV</div><div class="axos-acct-info"><div class="axos-acct-name" style="color:var(--text3)">Savings</div><div class="axos-acct-num">Loading...</div></div><div class="axos-acct-bal" style="color:var(--text3)">- -</div></div>
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(255,255,255,.05);color:var(--text3)">INV</div><div class="axos-acct-info"><div class="axos-acct-name" style="color:var(--text3)">Invest</div><div class="axos-acct-num">Fetching...</div></div><div class="axos-acct-bal" style="color:var(--text3)">- -</div></div>
+</div>
+<div class="axos-loading" style="text-align:center;padding:16px 22px">Fetching legacy account data...</div>
+</div>
+<div class="outcome-metrics generic-m">
+<div class="outcome-metric"><div class="outcome-metric-value">8.0s</div><div class="outcome-metric-label">load time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">31%</div><div class="outcome-metric-label">abandon rate</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">0</div><div class="outcome-metric-label">NBA shown</div></div>
+</div>
+</div>
+<!-- PERSONALIZED -->
+<div class="outcome-col">
+<div class="outcome-header personalized">Redis On-Prem (180ms)</div>
+<div class="axos-phone">
+<div class="axos-topnav"><div class="axos-logo">AXOS<span>ONE</span></div><div class="axos-avatar">EV</div></div>
+<div class="axos-greeting">Good morning, <strong>Elena</strong></div>
+<div class="axos-hero">
+<div class="axos-hero-label">Total Net Position</div>
+<div class="axos-hero-value">$184,200</div>
+<div class="axos-hero-change">&#9650; $1,240 this week</div>
+</div>
+<div class="axos-section-title">Your Accounts</div>
+<div class="axos-acct-list">
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(0,201,167,.15);color:var(--teal)">SAV</div><div class="axos-acct-info"><div class="axos-acct-name">HY Savings</div><div class="axos-acct-num">...4892 &middot; 4.66% APY</div></div><div class="axos-acct-bal">$70,100</div></div>
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(79,140,255,.15);color:var(--blue)">INV</div><div class="axos-acct-info"><div class="axos-acct-name">Axos Invest</div><div class="axos-acct-num">...7318 &middot; Managed</div></div><div class="axos-acct-bal">$49,700</div></div>
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(255,188,87,.15);color:var(--amber)">CD</div><div class="axos-acct-info"><div class="axos-acct-name">CD (matures 18d)</div><div class="axos-acct-num">...2204 &middot; 4.10% APY</div></div><div class="axos-acct-bal">$36,800</div></div>
+<div class="axos-acct"><div class="axos-acct-icon" style="background:rgba(184,148,31,.2);color:var(--axos-gold)">CHK</div><div class="axos-acct-info"><div class="axos-acct-name">Axos ONE Checking</div><div class="axos-acct-num">...1157 &middot; 1.00% APY</div></div><div class="axos-acct-bal">$27,600</div></div>
+</div>
+<div class="axos-nba">
+<div class="axos-nba-label">Recommended For You</div>
+<div class="axos-nba-title">Unlock your home equity</div>
+<div class="axos-nba-desc">Pre-qualified HELOC up to $250,000 based on your profile</div>
+</div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">180ms</div><div class="outcome-metric-label">load time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">&lt;4%</div><div class="outcome-metric-label">abandon rate</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">3</div><div class="outcome-metric-label">NBA ranked</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under 200 milliseconds. Every customer. Every session.</div><div class="stage-subtitle">Every component you just saw running together on Axos's existing on-prem Linux infrastructure. Three disparate cores unified into one in-memory view. M&amp;A integration pattern that scales from 600K to 2M+ customers without re-architecture.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources (Disparate Cores)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>SQL Server</h4><p>Core banking ledger</p></div>
+<div class="arch-node"><h4>Axos Invest DB</h4><p>Brokerage positions</p></div>
+<div class="arch-node"><h4>Enrollment Core</h4><p>Acquired institution data</p></div>
+<div class="arch-node"><h4>Databricks Lakehouse</h4><p>Loan / deposit features</p></div>
+<div class="arch-node"><h4>Kafka / RTP Events</h4><p>Payment + transaction stream</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>CDC from SQL Server, Invest DB, enrollment core. Sub-second sync, automated write-back</p></div>
+<div class="arch-node"><h4>FeatureForm</h4><p>Feature engineering from Databricks + Kafka</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (On-Prem, Active-Active)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms account reads, live session state</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, full transaction history, statements</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">JSON Profiles</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Streams</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Session State</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Account Assembler</h4><p>Unified balance + net worth composition</p></div>
+<div class="arch-node"><h4>Rules / Eligibility</h4><p>Suppression, compliance, KYC state</p></div>
+<div class="arch-node"><h4>NBA Ranker</h4><p>Cross-sell scoring, LTV weighting</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Product + offer matching</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Axos ONE Mobile</h4><p>Unified dashboard, sub-200ms render</p></div>
+<div class="arch-node"><h4>Axos.com Web</h4><p>Desktop banking experience</p></div>
+<div class="arch-node"><h4>Axos Invest</h4><p>Brokerage + robo-advisory</p></div>
+<div class="arch-node"><h4>Zenith / Commercial</h4><p>HNW + business banking</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Session exhaust &rarr; Kafka &rarr; Databricks training &rarr; Updated NBA models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Dashboard Load (P99)</div><div class="arch-callout-value teal">8.0s &rarr; 180ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Deployment Footprint</div><div class="arch-callout-value orange">6 on-prem Linux nodes</div></div>
+<div class="arch-callout"><div class="arch-callout-label">M&amp;A Scale Headroom</div><div class="arch-callout-value amber">600K &rarr; 2M+ customers</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<200ms','0.2ms','1.4ms','2.8ms','4.2ms','6.1ms','7.0ms','180ms','180ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
