@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demos</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--bg:#080B14;--bg2:#0F1420;
+  --border:rgba(255,255,255,.08);--text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;
+  background-image:radial-gradient(ellipse at top,rgba(220,56,44,.08),transparent 60%),
+    radial-gradient(ellipse at bottom right,rgba(0,201,167,.05),transparent 60%)}
+.wrap{max-width:1000px;margin:0 auto;padding:80px 40px}
+.header{margin-bottom:60px}
+.redis-logo{font-size:32px;font-weight:800;color:var(--red);letter-spacing:-.5px;margin-bottom:8px}
+.tagline{font-size:13px;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:2px}
+.h1{font-size:52px;font-weight:700;line-height:1.1;letter-spacing:-1px;margin:50px 0 20px}
+.h1 .accent{color:var(--red)}
+.sub{font-size:18px;color:var(--text2);line-height:1.6;max-width:680px;margin-bottom:60px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:24px;margin-bottom:60px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:36px;
+  text-decoration:none;color:inherit;transition:all .3s;position:relative;overflow:hidden;display:block}
+.card::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at top left,rgba(220,56,44,.06),transparent 60%);pointer-events:none;opacity:0;transition:opacity .3s}
+.card:hover{border-color:var(--red);transform:translateY(-4px);box-shadow:0 20px 40px rgba(0,0,0,.4)}
+.card:hover::before{opacity:1}
+.badge{display:inline-block;padding:5px 12px;border-radius:6px;font-family:var(--mono);
+  font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  background:rgba(220,56,44,.12);color:var(--red);border:1px solid rgba(220,56,44,.25);margin-bottom:18px}
+.card h2{font-size:28px;font-weight:700;margin-bottom:10px;letter-spacing:-.3px}
+.card p{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:24px}
+.card .meta{display:flex;gap:20px;padding-top:20px;border-top:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text3)}
+.card .meta span{display:flex;align-items:center;gap:6px}
+.card .meta b{color:var(--teal);font-weight:600}
+.card .arrow{position:absolute;top:36px;right:36px;font-size:22px;color:var(--text3);transition:all .3s}
+.card:hover .arrow{color:var(--red);transform:translateX(4px)}
+.footer{padding-top:40px;border-top:1px solid var(--border);font-size:12px;color:var(--text3);display:flex;justify-content:space-between;font-family:var(--mono)}
+@media(max-width:700px){.wrap{padding:50px 24px}.h1{font-size:38px}.grid{grid-template-columns:1fr}.card{padding:28px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="redis-logo">Redis</div>
+    <div class="tagline">Real-Time Decisioning &middot; Demo Gallery</div>
+  </div>
+
+  <h1 class="h1">Under ten milliseconds.<br><span class="accent">Every decision.</span></h1>
+  <p class="sub">Interactive walkthroughs of the Redis Real-Time Decisioning architecture, built for specific enterprise accounts. Each demo walks nine stages from trigger to outcome, showing how Redis turns batch data infrastructure into sub-10ms decisioning.</p>
+
+  <div class="grid">
+
+    <a class="card" href="/ulta">
+      <span class="arrow">&rarr;</span>
+      <div class="badge">Retail &middot; Beauty</div>
+      <h2>Ulta Beauty</h2>
+      <p>In-session behavioral personalization for 46M+ loyalty members. Sarah, a Diamond member, browses mascara and Redis completes her eye routine in real time.</p>
+      <div class="meta">
+        <span>9 stages</span>
+        <span>Latency <b>8.4ms P99</b></span>
+        <span>AOV <b>$2.18 &rarr; $7.92</b></span>
+      </div>
+    </a>
+
+    <a class="card" href="/vizio">
+      <span class="arrow">&rarr;</span>
+      <div class="badge">CTV &middot; Streaming</div>
+      <h2>Vizio</h2>
+      <p>Personalized SmartCast home screen across 28M households. Marcus powers on his TV and Redis surfaces WatchFree+ content that actually matches his taste.</p>
+      <div class="meta">
+        <span>9 stages</span>
+        <span>Latency <b>8.4ms P99</b></span>
+        <span>CTR <b>2.3% &rarr; 18.7%</b></span>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="footer">
+    <span>Built with Redis Real-Time Decisioning</span>
+    <span>Use arrow keys or click to navigate each demo</span>
+  </div>
+</div>
+</body>
+</html>

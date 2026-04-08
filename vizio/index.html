@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | Vizio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --vizio-bg:#0A0A0A;--vizio-card:#1A1A1A;--vizio-border:rgba(255,255,255,.08);
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:780px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.genre-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
+.genre-bar div{height:100%}
+.genre-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
+.viewer-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.viewer-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--orange),var(--amber));display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.viewer-name{font-size:17px;font-weight:700}.viewer-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.viewer-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(249,115,22,.12);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+/* Content cards for ranking */
+.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.content-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.content-card.winner .content-rank{color:var(--teal)}
+.content-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.content-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-wf{background:rgba(249,115,22,.15);color:var(--orange)}
+.src-netflix{background:rgba(220,56,44,.15);color:#E50914}
+.src-prime{background:rgba(79,140,255,.12);color:var(--blue)}
+.src-apple{background:rgba(255,255,255,.1);color:var(--text2)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+/* Revenue stage */
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+/* ── ARCHITECTURE (matches Landing Page tier system) ── */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+/* Feature serving */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Vizio mockup */
+.vizio-screen{background:var(--vizio-bg);border-radius:16px;border:2px solid #333;overflow:hidden;position:relative}
+.vizio-hero{position:relative;height:240px;overflow:hidden;display:flex;align-items:flex-end;padding:28px 36px}
+.vizio-hero-bg{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none}
+.vizio-hero-content{position:relative;z-index:2;max-width:440px}
+.vizio-hero-source{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;font-family:var(--mono)}
+.vizio-hero-title{font-size:26px;font-weight:800;line-height:1.15;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+.vizio-hero-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:16px}
+.vizio-hero-btn{display:inline-block;padding:9px 22px;border-radius:4px;border:2px solid var(--orange);color:#fff;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.vizio-row{padding:16px 36px}
+.vizio-row-title{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text2);margin-bottom:10px;font-family:var(--mono)}
+.vizio-tiles{display:flex;gap:8px;overflow:hidden}
+.vizio-tile{flex-shrink:0;width:120px;height:72px;border-radius:6px;display:flex;align-items:flex-end;padding:8px;font-size:10px;font-weight:700;position:relative}
+.tile-source{position:absolute;top:6px;right:6px;font-size:8px;font-weight:700;font-family:var(--mono);text-transform:uppercase;letter-spacing:.5px}
+.vizio-app-row{display:flex;gap:10px;overflow:hidden}
+.vizio-app{flex-shrink:0;padding:10px 14px;border-radius:6px;background:rgba(255,255,255,.06);font-size:10px;font-weight:700;letter-spacing:.5px}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+/* Nav */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}.vizio-hero{height:200px;padding:20px 24px}.vizio-row{padding-left:24px;padding-right:24px}.vizio-tile{width:110px;height:66px}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | Vizio</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>TV Powers On</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Ranking</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Revenue</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Vizio's Real-Time Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Vizio's source systems feed Redis. Redis decides. SmartCast renders. Every personalization decision flows through this architecture in under 10 milliseconds.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Snowflake</h4><p>Viewer 360 / history</p></div>
+<div class="arch-node"><h4>Databricks</h4><p>ML features / Content catalog</p></div>
+<div class="arch-node"><h4>DynamoDB</h4><p>offline recommendations</p></div>
+<div class="arch-node"><h4>Kafka</h4><p>Live telemetry</p></div>
+<div class="arch-node"><h4>Trends + Weather APIs</h4><p>Situational signals</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, YAML transformation pipelines, proactive data staging</p></div>
+<div class="arch-node"><h4>FeatureForm</h4><p>Feature Engineering, ingestion</p></div>
+</div></div>
+
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Operational 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms latency, live session signals</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, full viewing history, embeddings</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">JSON Profiles</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Streams</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Session State</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Policy</h4><p>Suppression, eligibility, guardrails</p></div>
+<div class="arch-node"><h4>ML Ranker</h4><p>Personalization, revenue weighting</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Semantic content matching</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>LLM acceleration, grounding</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>SmartCast Home</h4><p>Personalized hero + rows</p></div>
+<div class="arch-node"><h4>WatchFree+ Surface</h4><p>Revenue-weighted promotion</p></div>
+<div class="arch-node"><h4>Cross-App Tiles</h4><p>Netflix / Prime / Hulu / Apple TV+</p></div>
+<div class="arch-node"><h4>Voice + Remote</h4><p>SmartCast voice search</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kafka &rarr; Databricks training &rarr; Updated models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">End-to-End Latency</div><div class="arch-callout-value teal">&lt;10 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Decisions Per Second</div><div class="arch-callout-value orange">2.4M sustained</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Revenue Lift Target</div><div class="arch-callout-value amber">+38% WF+ engagement</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: TV POWERS ON ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: TV Powers On</div><div class="stage-title">Marcus turns on his Vizio TV</div><div class="stage-subtitle">A session event fires the moment SmartCast OS loads. Redis identifies a high-value returning viewer and activates the personalization pipeline.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Viewer Session Event</div>
+<div class="viewer-card"><div class="viewer-avatar">MC</div><div><div class="viewer-name">Marcus Cole</div><div class="viewer-detail">Vizio M-Series 65" | Member since 2022 | 22 sessions last 30 days</div></div><div class="viewer-badge">HIGH VALUE</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">smartcast_session_start</span></div>
+<div class="data-row"><span class="data-label">Time</span><span class="data-value orange">8:42 PM (prime viewing window)</span></div>
+<div class="data-row"><span class="data-label">Device location</span><span class="data-value">Rochester Hills, MI</span></div>
+<div class="data-row"><span class="data-label">Connected apps</span><span class="data-value">Netflix, Prime, Hulu, Apple TV+, Peacock</span></div>
+<div class="data-row"><span class="data-label">WatchFree+ engagement</span><span class="data-value amber">Moderate (responds when surfaced well)</span></div>
+<div class="data-row"><span class="data-label">Avg session length</span><span class="data-value">2.4 hours</span></div>
+<div class="data-row"><span class="data-label">Last session</span><span class="data-value">Yesterday, 9:11 PM</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Matters</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Marcus has <strong style="color:var(--orange)">22 sessions</strong> in 30 days but only <strong style="color:var(--amber)">18% of his viewing</strong> is on WatchFree+. The rest goes to Netflix and Prime.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Every WatchFree+ minute generates <strong style="color:var(--teal)">ad revenue</strong>. Every minute on Netflix generates <strong style="color:var(--text3)">$0 for Vizio</strong>.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--orange)">The opportunity:</strong> Surface WatchFree+ content Marcus will actually want to watch, so personalization quality drives revenue, not just engagement.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> Marcus sees the same generic home screen as every other viewer. Random WatchFree+ promo. "Trending Now" based on national popularity. He scrolls past it and opens Netflix.</div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Vizio's data sources flow into Redis</div><div class="stage-subtitle">RDI continuously syncs changes from data sources, and Featureform orchestrates data ingestion from Snowflake, Databricks, and Kafka into a unified low-latency layer. Batch warehouses and live event streams converge in one place.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">FeatureForm</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#29B5E8">SNOW</div><div><div class="flow-source">Snowflake &middot; Viewer 360 Warehouse</div><div class="flow-detail">3.2 years of viewing history | Demographics | Subscription state | Lifetime value</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">DBX</div><div><div class="flow-source">Databricks &middot; ML Feature Pipeline</div><div class="flow-detail">Viewer embeddings | Genre affinity vectors | Completion rate models | Refreshed every 4 hours</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:#A78BFA">DYN</div><div><div class="flow-source">DynamoDB &middot; Content Catalog</div><div class="flow-detail">4,200+ WatchFree+ titles | 12,000+ cross-platform titles | Ad inventory mapped per title</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KFK</div><div><div class="flow-source">Kafka &middot; Live Telemetry Stream</div><div class="flow-detail">Power-on events | Remote interactions | App launches | Pause / play / abandon signals</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">API</div><div><div class="flow-source">Connected App APIs</div><div class="flow-detail">Netflix, Prime, Hulu, Apple TV+, Peacock | Continue watching + new releases</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+<div class="data-row"><span class="data-label">Snowflake sync</span><span class="data-value teal">Streaming</span></div>
+<div class="data-row"><span class="data-label">Databricks sync</span><span class="data-value teal">4h refresh</span></div>
+<div class="data-row"><span class="data-label">DynamoDB sync</span><span class="data-value teal">CDC streams</span></div>
+<div class="data-row"><span class="data-label">Kafka lag</span><span class="data-value teal">&lt;80ms</span></div>
+<div class="data-row"><span class="data-label">Cache misses</span><span class="data-value teal">0</span></div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT BUILD ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Marcus's Viewer 360 + situational signals</div><div class="stage-subtitle">Redis assembles the full picture: who Marcus is, what he watches, what's trending right now, and what's happening in his world. Personal history meets real-time context.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Viewer 360 (Personal)</div>
+<div style="margin-bottom:14px">
+<div class="data-label" style="margin-bottom:8px;font-size:12px">Genre Affinity Distribution</div>
+<div class="genre-bar"><div style="width:42%;background:var(--red)"></div><div style="width:23%;background:var(--blue)"></div><div style="width:15%;background:var(--amber)"></div><div style="width:10%;background:var(--teal)"></div><div style="width:10%;background:var(--purple)"></div></div>
+<div class="genre-label"><span>Thriller 42%</span><span>Sci-fi 23%</span><span>Action 15%</span><span>Drama 10%</span><span>Other 10%</span></div>
+</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Currently watching</span><span class="data-value orange">Slow Horses S4</span></div>
+<div class="data-row"><span class="data-label">Last completed</span><span class="data-value">Reacher S3</span></div>
+<div class="data-row"><span class="data-label">Total titles watched</span><span class="data-value">847 / 3.2 yrs</span></div>
+<div class="data-row"><span class="data-label">Completion rate</span><span class="data-value teal">78% series / 92% films</span></div>
+<div class="data-row"><span class="data-label">WatchFree+ recency</span><span class="data-value red">12 days</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Situational Context (Live)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Top trending: thriller</span><span class="data-value orange">The Night Agent S2</span></div>
+<div class="data-row"><span class="data-label">Top trending: drama</span><span class="data-value">Bosch: Legacy S3</span></div>
+<div class="data-row"><span class="data-label">National momentum (24h)</span><span class="data-value teal">+184% searches</span></div>
+<div class="data-row"><span class="data-label">Local weather</span><span class="data-value blue">Heavy rain, all evening</span></div>
+<div class="data-row"><span class="data-label">Forecast through Sun</span><span class="data-value blue">Rain, 56&deg;F</span></div>
+<div class="data-row"><span class="data-label">Day of week</span><span class="data-value">Sunday (long-form bias)</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--blue)">Context signal:</strong> Rainy Sunday evening &rarr; bias toward longer-form content (films, multi-episode binges) over short-form. Surface Marcus's affinities at full season depth, not single episodes.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the ranking model</div><div class="stage-subtitle">Featureform pulls every signal needed by the ML ranker into a single vector. Personal features, content features, and situational features merge in sub-millisecond. No feature lookups during scoring.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">VIEWER_GENRE_VECTOR</div><div class="feat-desc">Marcus's lifetime genre affinity, weighted toward last 90 days</div><div class="feat-value-row"><span class="feat-value">[0.42, 0.23, 0.15, ...]</span><span class="feat-latency">0.6 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">VIEWER_EMBEDDING_512D</div><div class="feat-desc">Databricks-trained semantic embedding of Marcus's viewing identity</div><div class="feat-value-row"><span class="feat-value">[0.81, -0.34, 0.62, ...]</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">SESSION_TIME_OF_DAY</div><div class="feat-desc">Live time bucket and day-of-week flag from Kafka stream</div><div class="feat-value-row"><span class="feat-value">evening_sun_long_form</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">WF_PLUS_RECENCY_DAYS</div><div class="feat-desc">Days since last WatchFree+ session, drives priority boost</div><div class="feat-value-row"><span class="feat-value">12</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">TRENDING_OVERLAP_SCORE</div><div class="feat-desc">Intersection of top trending titles with viewer affinity</div><div class="feat-value-row"><span class="feat-value">0.87</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">WEATHER_LONGFORM_BIAS</div><div class="feat-desc">Local weather signal converted to content-length bias</div><div class="feat-value-row"><span class="feat-value">+0.34 (rain)</span><span class="feat-latency">0.3 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0">
+<div class="viz-panel-title">Feature Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center">
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Total Features Hydrated</div><div style="font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono)">214</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">2.3 ms</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Online / Offline Parity</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Cache Hit Rate</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">99.7%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: CONTENT RANKING ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Content Ranking</div><div class="stage-title">Content scored and ranked in real time</div><div class="stage-subtitle">Vector Search matches Marcus's viewer embedding to content embeddings across all sources. WatchFree+ titles get priority scoring. Already-watched content is suppressed.</div><span class="component-tag">Vector Search</span><span class="component-tag">ML Ranker</span><span class="component-tag">Rules Engine</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">4,200+ WatchFree+ titles</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:12px;color:var(--blue)">12,000+ cross-platform titles</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">847 suppressed (already watched)</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 24 ranked for home screen</div>
+</div>
+<div class="content-grid">
+<div class="content-card winner"><div class="content-rank">#1 Hero Banner</div><div class="content-source src-wf">WatchFree+</div><div class="content-title">The Night Agent S2</div><div class="content-meta">Thriller | 2025 | 91% match to Marcus</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">CIA thriller matching Slow Horses + Reacher affinity. New episodes. High ad CPM. Trending nationally.</div><div class="score-bar"><div class="score-fill" style="--score:96%;background:var(--teal)"></div></div><div class="score-label"><span>Relevance</span><span style="color:var(--teal)">96%</span></div></div>
+<div class="content-card"><div class="content-rank">#2 Recommended Row</div><div class="content-source src-wf">WatchFree+</div><div class="content-title">Bosch: Legacy S3</div><div class="content-meta">Crime Drama | 2025 | 88% match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">LA crime procedural. Long-form binge fit for rainy Sunday. Available free.</div><div class="score-bar"><div class="score-fill" style="--score:88%;background:var(--orange)"></div></div><div class="score-label"><span>Relevance</span><span style="color:var(--orange)">88%</span></div></div>
+<div class="content-card"><div class="content-rank">#3 Cross-Platform</div><div class="content-source src-netflix">Netflix</div><div class="content-title">Black Doves</div><div class="content-meta">Spy Thriller | 2025 | 85% match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">British espionage. Slow Horses viewer crossover. On Marcus's Netflix.</div><div class="score-bar"><div class="score-fill" style="--score:85%;background:var(--blue)"></div></div><div class="score-label"><span>Relevance</span><span style="color:var(--blue)">85%</span></div></div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 7: REVENUE OPTIMIZATION ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Revenue Optimization</div><div class="stage-title">Personalization meets monetization</div><div class="stage-subtitle">WatchFree+ content receives a revenue multiplier because every view generates ad impressions. The system balances what Marcus wants to watch with what generates revenue for Vizio.</div><span class="component-tag">ML Ranking</span><span class="component-tag">LangCache</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Revenue-Weighted Ranking Logic</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">WatchFree+ revenue per view</span><span class="data-value teal">$0.038 avg CPM per minute</span></div>
+<div class="data-row"><span class="data-label">Netflix/Prime revenue per view</span><span class="data-value red">$0.00 (no ad revenue)</span></div>
+<div class="data-row"><span class="data-label">WF+ priority multiplier applied</span><span class="data-value amber">1.4x for high-relevance WF+ content</span></div>
+<div class="data-row"><span class="data-label">Personalization quality floor</span><span class="data-value">Never below 70% relevance</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> A WatchFree+ title at 88% relevance generates more total value than a Netflix title at 92% relevance, because the WF+ view creates ad revenue while Netflix creates zero. Redis optimizes for total viewer value, not just click-through rate.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Projected Session Impact</div>
+<div class="rev-compare">
+<div class="rev-card before"><div class="rev-value" style="color:var(--text3)">$0.00</div><div class="rev-label">Generic home screen<br>Marcus opens Netflix</div></div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">$0.14</div><div class="rev-label">Personalized screen<br>Marcus watches WF+ first</div></div>
+</div>
+<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">Per session lift, multiplied across <strong style="color:var(--text)">28M Vizio households</strong> = meaningful annual revenue.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Marcus's home screen, two ways</div><div class="stage-subtitle">Same viewer, same moment, two very different experiences. The Redis-personalized screen surfaces what Marcus actually wants and what makes Vizio money.</div></div>
+<div class="outcome-split">
+<!-- GENERIC -->
+<div class="outcome-col">
+<div class="outcome-header generic">Generic Home Screen (Today)</div>
+<div class="vizio-screen">
+<div class="vizio-hero" style="background:linear-gradient(135deg,#1a1a1a,#0f0f0f)">
+<div class="vizio-hero-content"><div class="vizio-hero-source" style="color:var(--text3)">FEATURED</div><div class="vizio-hero-title" style="color:var(--text2)">Reality Cooking Marathon</div><div class="vizio-hero-desc">Watch home cooks compete in the ultimate kitchen showdown.</div><div class="vizio-hero-btn" style="border-color:var(--text3);color:var(--text3)">Watch for Free</div></div>
+</div>
+<div class="vizio-row"><div class="vizio-row-title" style="color:var(--text3)">Trending Now</div>
+<div class="vizio-tiles">
+<div class="vizio-tile" style="background:#2a1a1a;color:var(--text3)">Reality Cooking<div class="tile-source">WF+</div></div>
+<div class="vizio-tile" style="background:#1a2a1a;color:var(--text3)">Teen Drama<div class="tile-source">WF+</div></div>
+<div class="vizio-tile" style="background:#1a1a2a;color:var(--text3)">Home Reno<div class="tile-source">WF+</div></div>
+<div class="vizio-tile" style="background:#2a2a1a;color:var(--text3)">Romcom<div class="tile-source">WF+</div></div>
+</div></div>
+<div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title" style="color:var(--text3)">Apps &amp; Inputs</div>
+<div class="vizio-app-row">
+<div class="vizio-app" style="color:var(--text3)">Netflix</div>
+<div class="vizio-app" style="color:var(--text3)">Prime</div>
+<div class="vizio-app" style="color:var(--text3)">Hulu</div>
+<div class="vizio-app" style="color:var(--text3)">Apple TV+</div>
+</div></div>
+</div>
+<div class="outcome-metrics generic-m">
+<div class="outcome-metric"><div class="outcome-metric-value">2.3%</div><div class="outcome-metric-label">WF+ click rate</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">0 min</div><div class="outcome-metric-label">WF+ watch time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">$0.00</div><div class="outcome-metric-label">Ad revenue</div></div>
+</div>
+</div>
+<!-- PERSONALIZED -->
+<div class="outcome-col">
+<div class="outcome-header personalized">Redis-Personalized Screen</div>
+<div class="vizio-screen" style="border-color:rgba(0,201,167,.3)">
+<div class="vizio-hero" style="background:linear-gradient(135deg,#1a0a0a,#2a1008)">
+<div class="vizio-hero-content"><div class="vizio-hero-source" style="color:var(--orange)">WATCH FREE+</div><div class="vizio-hero-title" style="color:#fff">The Night Agent S2</div><div class="vizio-hero-desc">A White House insider uncovers a conspiracy that puts everyone he loves in danger. New episodes weekly.</div><div class="vizio-hero-btn">Watch for Free</div></div>
+</div>
+<div class="vizio-row"><div class="vizio-row-title">Recommended for You</div>
+<div class="vizio-tiles">
+<div class="vizio-tile" style="background:linear-gradient(135deg,#2a0a0a,#1a0808);color:#fff;border:1px solid rgba(249,115,22,.2)">Bosch: Legacy<div class="tile-source" style="color:var(--orange)">WF+</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#0a0a2a,#08081a);color:#fff;border:1px solid rgba(79,140,255,.15)">Black Doves<div class="tile-source" style="color:var(--blue)">Netflix</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#1a1a0a,#0a0a08);color:#fff;border:1px solid rgba(249,115,22,.2)">Tracker S2<div class="tile-source" style="color:var(--orange)">WF+</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#0a1a2a,#081018);color:#fff;border:1px solid rgba(79,140,255,.15)">Silo S2<div class="tile-source" style="color:var(--blue)">Prime</div></div>
+</div></div>
+<div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title">Continue Watching</div>
+<div class="vizio-tiles">
+<div class="vizio-tile" style="background:linear-gradient(135deg,#1a2a1a,#0a1a0a);color:#fff;border:1px solid rgba(255,255,255,.1)">Slow Horses S4<div class="tile-source" style="color:var(--text2)">Apple TV+</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#2a0a1a,#1a0810);color:#fff;border:1px solid rgba(255,255,255,.1)">Reacher S3<div class="tile-source" style="color:var(--text2)">Prime</div></div>
+</div></div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">18.7%</div><div class="outcome-metric-label">WF+ click rate</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">38 min</div><div class="outcome-metric-label">WF+ watch time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">$0.14</div><div class="outcome-metric-label">Ad revenue</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under ten milliseconds. One personalized screen.</div><div class="stage-subtitle">Every component you just saw running together. Snowflake, Databricks, DynamoDB, and Kafka feed Redis. Redis decides. SmartCast renders. The result is more revenue per session and a viewer who actually finds something to watch.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Snowflake</h4><p>Viewer 360 / history</p></div>
+<div class="arch-node"><h4>Databricks</h4><p>ML features / Content catalog</p></div>
+<div class="arch-node"><h4>DynamoDB</h4><p>offline recommendations</p></div>
+<div class="arch-node"><h4>Kafka</h4><p>Live telemetry</p></div>
+<div class="arch-node"><h4>Trends + Weather APIs</h4><p>Situational signals</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, YAML transformation pipelines, proactive data staging</p></div>
+<div class="arch-node"><h4>FeatureForm</h4><p>Feature Engineering, ingestion</p></div>
+</div></div>
+
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Operational 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms latency, live session signals</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, full viewing history, embeddings</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">JSON Profiles</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Streams</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Session State</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Policy</h4><p>Suppression, eligibility, guardrails</p></div>
+<div class="arch-node"><h4>ML Ranker</h4><p>Personalization, revenue weighting</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Semantic content matching</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>LLM acceleration, grounding</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>SmartCast Home</h4><p>Personalized hero + rows</p></div>
+<div class="arch-node"><h4>WatchFree+ Surface</h4><p>Revenue-weighted promotion</p></div>
+<div class="arch-node"><h4>Cross-App Tiles</h4><p>Netflix / Prime / Hulu / Apple TV+</p></div>
+<div class="arch-node"><h4>Voice + Remote</h4><p>SmartCast voice search</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kafka &rarr; Databricks training &rarr; Updated models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Pipeline Latency (P99)</div><div class="arch-callout-value teal">8.4 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">WF+ Click Rate Lift</div><div class="arch-callout-value orange">2.3% &rarr; 18.7%</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Ad Revenue Per Session</div><div class="arch-callout-value amber">$0.00 &rarr; $0.14</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.2ms','1.4ms','2.8ms','5.1ms','7.2ms','8.0ms','8.4ms','8.4ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
