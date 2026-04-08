@@ -237,9 +237,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
 <div class="arch-tier-row">
 <div class="arch-node"><h4>Snowflake</h4><p>Viewer 360 / history</p></div>
-<div class="arch-node"><h4>Databricks</h4><p>ML features / Content catalog</p></div>
-<div class="arch-node"><h4>DynamoDB</h4><p>offline recommendations</p></div>
-<div class="arch-node"><h4>Kafka</h4><p>Live telemetry</p></div>
+<div class="arch-node"><h4>Databricks</h4><p>ML features / model training</p></div>
+<div class="arch-node"><h4>Amazon S3</h4><p>Content catalog</p></div>
+<div class="arch-node"><h4>Kinesis</h4><p>Live telemetry stream</p></div>
 <div class="arch-node"><h4>Trends + Weather APIs</h4><p>Situational signals</p></div>
 </div></div>
 
@@ -288,7 +288,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="arch-node"><h4>Voice + Remote</h4><p>SmartCast voice search</p></div>
 </div></div>
 
-<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kafka &rarr; Databricks training &rarr; Updated models &rarr; Redeployed to Redis context tier</span></div>
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kinesis &rarr; Databricks training &rarr; Updated models &rarr; Redeployed to Redis context tier</span></div>
 
 </div>
 <div class="arch-callouts">
@@ -325,14 +325,14 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 3: INGEST ══ -->
 <div class="stage-content" id="stage2">
-<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Vizio's data sources flow into Redis</div><div class="stage-subtitle">RDI continuously syncs changes from data sources, and Featureform orchestrates data ingestion from Snowflake, Databricks, and Kafka into a unified low-latency layer. Batch warehouses and live event streams converge in one place.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">FeatureForm</span></div>
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Vizio's data sources flow into Redis</div><div class="stage-subtitle">RDI continuously syncs changes from data sources, and Featureform orchestrates data ingestion from Snowflake, Databricks, S3, and Kinesis into a unified low-latency layer. Batch warehouses and live event streams converge in one place.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">FeatureForm</span></div>
 <div class="viz-area">
 <div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
 <div class="flow-container">
 <div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#29B5E8">SNOW</div><div><div class="flow-source">Snowflake &middot; Viewer 360 Warehouse</div><div class="flow-detail">3.2 years of viewing history | Demographics | Subscription state | Lifetime value</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">DBX</div><div><div class="flow-source">Databricks &middot; ML Feature Pipeline</div><div class="flow-detail">Viewer embeddings | Genre affinity vectors | Completion rate models | Refreshed every 4 hours</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:#A78BFA">DYN</div><div><div class="flow-source">DynamoDB &middot; Content Catalog</div><div class="flow-detail">4,200+ WatchFree+ titles | 12,000+ cross-platform titles | Ad inventory mapped per title</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KFK</div><div><div class="flow-source">Kafka &middot; Live Telemetry Stream</div><div class="flow-detail">Power-on events | Remote interactions | App launches | Pause / play / abandon signals</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">DBX</div><div><div class="flow-source">Databricks &middot; ML Training + Features</div><div class="flow-detail">Viewer embeddings | Genre affinity vectors | Completion rate models | Refreshed every 4 hours</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,153,0,.12);color:#FF9900">S3</div><div><div class="flow-source">Amazon S3 &middot; Content Catalog</div><div class="flow-detail">4,200+ WatchFree+ titles | 12,000+ cross-platform titles | Ingested into Databricks for enrichment</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KNS</div><div><div class="flow-source">Kinesis &middot; Live Telemetry Stream</div><div class="flow-detail">Power-on events | Remote interactions | App launches | Pause / play / abandon signals</div></div><div class="flow-arrow">&rarr;</div></div>
 <div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">API</div><div><div class="flow-source">Connected App APIs</div><div class="flow-detail">Netflix, Prime, Hulu, Apple TV+, Peacock | Continue watching + new releases</div></div><div class="flow-arrow">&rarr;</div></div>
 </div></div>
 <div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
@@ -340,8 +340,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
 <div class="data-row"><span class="data-label">Snowflake sync</span><span class="data-value teal">Streaming</span></div>
 <div class="data-row"><span class="data-label">Databricks sync</span><span class="data-value teal">4h refresh</span></div>
-<div class="data-row"><span class="data-label">DynamoDB sync</span><span class="data-value teal">CDC streams</span></div>
-<div class="data-row"><span class="data-label">Kafka lag</span><span class="data-value teal">&lt;80ms</span></div>
+<div class="data-row"><span class="data-label">S3 catalog sync</span><span class="data-value teal">Event-driven</span></div>
+<div class="data-row"><span class="data-label">Kinesis lag</span><span class="data-value teal">&lt;80ms</span></div>
 <div class="data-row"><span class="data-label">Cache misses</span><span class="data-value teal">0</span></div>
 </div></div>
 </div></div>
@@ -383,7 +383,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="feat-grid">
 <div class="feat-card"><div class="feat-name">VIEWER_GENRE_VECTOR</div><div class="feat-desc">Marcus's lifetime genre affinity, weighted toward last 90 days</div><div class="feat-value-row"><span class="feat-value">[0.42, 0.23, 0.15, ...]</span><span class="feat-latency">0.6 ms</span></div></div>
 <div class="feat-card"><div class="feat-name">VIEWER_EMBEDDING_512D</div><div class="feat-desc">Databricks-trained semantic embedding of Marcus's viewing identity</div><div class="feat-value-row"><span class="feat-value">[0.81, -0.34, 0.62, ...]</span><span class="feat-latency">0.4 ms</span></div></div>
-<div class="feat-card"><div class="feat-name">SESSION_TIME_OF_DAY</div><div class="feat-desc">Live time bucket and day-of-week flag from Kafka stream</div><div class="feat-value-row"><span class="feat-value">evening_sun_long_form</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">SESSION_TIME_OF_DAY</div><div class="feat-desc">Live time bucket and day-of-week flag from Kinesis stream</div><div class="feat-value-row"><span class="feat-value">evening_sun_long_form</span><span class="feat-latency">0.2 ms</span></div></div>
 <div class="feat-card"><div class="feat-name">WF_PLUS_RECENCY_DAYS</div><div class="feat-desc">Days since last WatchFree+ session, drives priority boost</div><div class="feat-value-row"><span class="feat-value">12</span><span class="feat-latency">0.3 ms</span></div></div>
 <div class="feat-card"><div class="feat-name">TRENDING_OVERLAP_SCORE</div><div class="feat-desc">Intersection of top trending titles with viewer affinity</div><div class="feat-value-row"><span class="feat-value">0.87</span><span class="feat-latency">0.5 ms</span></div></div>
 <div class="feat-card"><div class="feat-name">WEATHER_LONGFORM_BIAS</div><div class="feat-desc">Local weather signal converted to content-length bias</div><div class="feat-value-row"><span class="feat-value">+0.34 (rain)</span><span class="feat-latency">0.3 ms</span></div></div>
@@ -441,14 +441,14 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 8: OUTCOME ══ -->
 <div class="stage-content" id="stage7">
-<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Marcus's home screen, two ways</div><div class="stage-subtitle">Same viewer, same moment, two very different experiences. The Redis-personalized screen surfaces what Marcus actually wants and what makes Vizio money.</div></div>
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Same rows. Smarter models. Better recommendations in every slot.</div><div class="stage-subtitle">Vizio's home screen is assembled row by row, with Editorial scheduling each row and a dedicated model deciding the content inside it. Redis does not change the layout. Redis changes what the models can see at request time, so the content inside every row gets smarter.</div></div>
 <div class="outcome-split">
 <!-- GENERIC -->
 <div class="outcome-col">
-<div class="outcome-header generic">Generic Home Screen (Today)</div>
+<div class="outcome-header generic">Batch Models (Today)</div>
 <div class="vizio-screen">
 <div class="vizio-hero" style="background:linear-gradient(135deg,#1a1a1a,#0f0f0f)">
-<div class="vizio-hero-content"><div class="vizio-hero-source" style="color:var(--text3)">FEATURED</div><div class="vizio-hero-title" style="color:var(--text2)">Reality Cooking Marathon</div><div class="vizio-hero-desc">Watch home cooks compete in the ultimate kitchen showdown.</div><div class="vizio-hero-btn" style="border-color:var(--text3);color:var(--text3)">Watch for Free</div></div>
+<div class="vizio-hero-content"><div class="vizio-hero-source" style="color:var(--text3)">FEATURED &middot; HERO ROW</div><div class="vizio-hero-title" style="color:var(--text2)">Reality Cooking Marathon</div><div class="vizio-hero-desc">Hero model surfaces yesterday's batch pick. Same national choice every viewer sees.</div><div class="vizio-hero-btn" style="border-color:var(--text3);color:var(--text3)">Watch for Free</div></div>
 </div>
 <div class="vizio-row"><div class="vizio-row-title" style="color:var(--text3)">Trending Now</div>
 <div class="vizio-tiles">
@@ -457,12 +457,17 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="vizio-tile" style="background:#1a1a2a;color:var(--text3)">Home Reno<div class="tile-source">WF+</div></div>
 <div class="vizio-tile" style="background:#2a2a1a;color:var(--text3)">Romcom<div class="tile-source">WF+</div></div>
 </div></div>
-<div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title" style="color:var(--text3)">Apps &amp; Inputs</div>
-<div class="vizio-app-row">
-<div class="vizio-app" style="color:var(--text3)">Netflix</div>
-<div class="vizio-app" style="color:var(--text3)">Prime</div>
-<div class="vizio-app" style="color:var(--text3)">Hulu</div>
-<div class="vizio-app" style="color:var(--text3)">Apple TV+</div>
+<div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title" style="color:var(--text3)">Recommended for You</div>
+<div class="vizio-tiles">
+<div class="vizio-tile" style="background:#1a1a1a;color:var(--text3)">Game Show<div class="tile-source">WF+</div></div>
+<div class="vizio-tile" style="background:#1a1a1a;color:var(--text3)">Docuseries<div class="tile-source">WF+</div></div>
+<div class="vizio-tile" style="background:#1a1a1a;color:var(--text3)">Sitcom Rerun<div class="tile-source">WF+</div></div>
+<div class="vizio-tile" style="background:#1a1a1a;color:var(--text3)">Travel Show<div class="tile-source">WF+</div></div>
+</div></div>
+<div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title" style="color:var(--text3)">Continue Watching</div>
+<div class="vizio-tiles">
+<div class="vizio-tile" style="background:#1a1a1a;color:var(--text3)">Slow Horses S4<div class="tile-source">Apple TV+</div></div>
+<div class="vizio-tile" style="background:#1a1a1a;color:var(--text3)">Reacher S3<div class="tile-source">Prime</div></div>
 </div></div>
 </div>
 <div class="outcome-metrics generic-m">
@@ -473,17 +478,24 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 </div>
 <!-- PERSONALIZED -->
 <div class="outcome-col">
-<div class="outcome-header personalized">Redis-Personalized Screen</div>
+<div class="outcome-header personalized">Real-Time Models on Redis</div>
 <div class="vizio-screen" style="border-color:rgba(0,201,167,.3)">
 <div class="vizio-hero" style="background:linear-gradient(135deg,#1a0a0a,#2a1008)">
-<div class="vizio-hero-content"><div class="vizio-hero-source" style="color:var(--orange)">WATCH FREE+</div><div class="vizio-hero-title" style="color:#fff">The Night Agent S2</div><div class="vizio-hero-desc">A White House insider uncovers a conspiracy that puts everyone he loves in danger. New episodes weekly.</div><div class="vizio-hero-btn">Watch for Free</div></div>
+<div class="vizio-hero-content"><div class="vizio-hero-source" style="color:var(--orange)">WATCH FREE+ &middot; HERO ROW</div><div class="vizio-hero-title" style="color:#fff">The Night Agent S2</div><div class="vizio-hero-desc">Hero model picks the best match for Marcus from live context and fresh features.</div><div class="vizio-hero-btn">Watch for Free</div></div>
 </div>
-<div class="vizio-row"><div class="vizio-row-title">Recommended for You</div>
+<div class="vizio-row"><div class="vizio-row-title">Trending Now</div>
+<div class="vizio-tiles">
+<div class="vizio-tile" style="background:linear-gradient(135deg,#2a0a0a,#1a0808);color:#fff;border:1px solid rgba(249,115,22,.2)">Lincoln Lawyer S3<div class="tile-source" style="color:var(--orange)">WF+</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#0a0a2a,#08081a);color:#fff;border:1px solid rgba(79,140,255,.15)">Black Doves<div class="tile-source" style="color:var(--blue)">Netflix</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#1a1a0a,#0a0a08);color:#fff;border:1px solid rgba(249,115,22,.2)">The Rookie S6<div class="tile-source" style="color:var(--orange)">WF+</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#0a1a2a,#081018);color:#fff;border:1px solid rgba(79,140,255,.15)">Silo S2<div class="tile-source" style="color:var(--blue)">Prime</div></div>
+</div></div>
+<div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title">Recommended for You</div>
 <div class="vizio-tiles">
 <div class="vizio-tile" style="background:linear-gradient(135deg,#2a0a0a,#1a0808);color:#fff;border:1px solid rgba(249,115,22,.2)">Bosch: Legacy<div class="tile-source" style="color:var(--orange)">WF+</div></div>
-<div class="vizio-tile" style="background:linear-gradient(135deg,#0a0a2a,#08081a);color:#fff;border:1px solid rgba(79,140,255,.15)">Black Doves<div class="tile-source" style="color:var(--blue)">Netflix</div></div>
 <div class="vizio-tile" style="background:linear-gradient(135deg,#1a1a0a,#0a0a08);color:#fff;border:1px solid rgba(249,115,22,.2)">Tracker S2<div class="tile-source" style="color:var(--orange)">WF+</div></div>
-<div class="vizio-tile" style="background:linear-gradient(135deg,#0a1a2a,#081018);color:#fff;border:1px solid rgba(79,140,255,.15)">Silo S2<div class="tile-source" style="color:var(--blue)">Prime</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#2a1a0a,#1a0a08);color:#fff;border:1px solid rgba(249,115,22,.2)">Criminal Minds<div class="tile-source" style="color:var(--orange)">WF+</div></div>
+<div class="vizio-tile" style="background:linear-gradient(135deg,#0a0a2a,#08081a);color:#fff;border:1px solid rgba(79,140,255,.15)">Jack Ryan S4<div class="tile-source" style="color:var(--blue)">Prime</div></div>
 </div></div>
 <div class="vizio-row" style="padding-top:8px"><div class="vizio-row-title">Continue Watching</div>
 <div class="vizio-tiles">
@@ -502,16 +514,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
 <div class="stage-content" id="stage8">
-<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under ten milliseconds. One personalized screen.</div><div class="stage-subtitle">Every component you just saw running together. Snowflake, Databricks, DynamoDB, and Kafka feed Redis. Redis decides. SmartCast renders. The result is more revenue per session and a viewer who actually finds something to watch.</div></div>
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under ten milliseconds. Smarter recommendations in every row.</div><div class="stage-subtitle">Every component you just saw running together. Snowflake, Databricks, S3, and Kinesis feed Redis. Redis decides. SmartCast renders. The result is a better recommendation inside every row Editorial schedules, and a viewer who actually finds something to watch.</div></div>
 <div class="arch-wrap">
 <div class="arch-frame">
 
 <div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
 <div class="arch-tier-row">
 <div class="arch-node"><h4>Snowflake</h4><p>Viewer 360 / history</p></div>
-<div class="arch-node"><h4>Databricks</h4><p>ML features / Content catalog</p></div>
-<div class="arch-node"><h4>DynamoDB</h4><p>offline recommendations</p></div>
-<div class="arch-node"><h4>Kafka</h4><p>Live telemetry</p></div>
+<div class="arch-node"><h4>Databricks</h4><p>ML features / model training</p></div>
+<div class="arch-node"><h4>Amazon S3</h4><p>Content catalog</p></div>
+<div class="arch-node"><h4>Kinesis</h4><p>Live telemetry stream</p></div>
 <div class="arch-node"><h4>Trends + Weather APIs</h4><p>Situational signals</p></div>
 </div></div>
 
@@ -560,7 +572,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="arch-node"><h4>Voice + Remote</h4><p>SmartCast voice search</p></div>
 </div></div>
 
-<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kafka &rarr; Databricks training &rarr; Updated models &rarr; Redeployed to Redis context tier</span></div>
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kinesis &rarr; Databricks training &rarr; Updated models &rarr; Redeployed to Redis context tier</span></div>
 
 </div>
 <div class="arch-callouts">
