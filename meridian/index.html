@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | Meridian Private Wealth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --mer-navy:#0B2545;--mer-gold:#C9A14A;
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:820px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}.data-value.gold{color:var(--mer-gold)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.08s}.flow-item:nth-child(2){animation-delay:.16s}.flow-item:nth-child(3){animation-delay:.24s}.flow-item:nth-child(4){animation-delay:.32s}.flow-item:nth-child(5){animation-delay:.4s}.flow-item:nth-child(6){animation-delay:.48s}.flow-item:nth-child(7){animation-delay:.56s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:46px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px;text-align:center;line-height:1}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.risk-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
+.risk-bar div{height:100%}
+.risk-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
+.client-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.client-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--mer-navy),#1B3F6B);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--mer-gold);flex-shrink:0;border:1px solid rgba(201,161,74,.3)}
+.client-name{font-size:17px;font-weight:700}.client-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.client-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(249,115,22,.12);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.signal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.signal-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.signal-card:nth-child(1){animation-delay:.15s}.signal-card:nth-child(2){animation-delay:.3s}.signal-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.signal-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.signal-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.signal-card.winner .signal-rank{color:var(--teal)}
+.signal-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.signal-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.signal-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-addepar{background:rgba(79,140,255,.15);color:var(--blue)}
+.src-aladdin{background:rgba(167,139,250,.15);color:var(--purple)}
+.src-plaid{background:rgba(0,201,167,.15);color:var(--teal)}
+.src-crm{background:rgba(255,188,87,.15);color:var(--amber)}
+.src-market{background:rgba(220,56,44,.15);color:var(--red)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+.arch-callout-value.red{color:var(--red)}
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+.app-screen{background:#F5F3EE;border-radius:14px;border:2px solid #333;overflow:hidden;position:relative;color:#1A1A1A}
+.app-screen.generic{border-color:rgba(255,255,255,.15)}
+.app-screen.personalized{border-color:rgba(0,201,167,.4)}
+.app-header{padding:18px 24px;background:var(--mer-navy);display:flex;align-items:center;justify-content:space-between}
+.app-brand{color:var(--mer-gold);font-size:14px;font-weight:800;letter-spacing:1px}
+.app-step{color:rgba(255,255,255,.7);font-size:11px;font-family:var(--mono)}
+.app-body{padding:22px}
+.app-client{display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid #E5E0D3;margin-bottom:16px}
+.app-avatar-sm{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--mer-navy),#1B3F6B);color:var(--mer-gold);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border:1px solid rgba(201,161,74,.4)}
+.app-client-name{font-size:14px;font-weight:700;color:#1A1A1A}
+.app-client-info{font-size:11px;color:#6B6355;margin-top:2px;font-family:var(--mono)}
+.nba-block{padding:14px;border-radius:10px;margin-bottom:10px;border:1px solid #D6D0BF;background:#FAF8F2}
+.nba-block.hero{border:2px solid var(--mer-gold);background:#FFFBED}
+.nba-label{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#8C6E20;margin-bottom:6px;font-family:var(--mono)}
+.nba-title{font-size:13px;font-weight:700;color:#0B2545;margin-bottom:4px}
+.nba-detail{font-size:11px;color:#4A5568;line-height:1.5}
+.generic-row{padding:12px;border-radius:8px;margin-bottom:8px;background:#EDE9DD;border:1px solid #D6D0BF}
+.generic-row-label{font-size:10px;color:#8C8270;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.generic-row-val{font-size:12px;color:#4A5568}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1}
+.outcome-col{display:flex;flex-direction:column;gap:12px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:12px;padding:14px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.signal-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | Meridian Private Wealth</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Client Event</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Next-Best-Action</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>AUM Impact</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- STAGE 1: ARCHITECTURE -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Meridian's Real-Time Advisor Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Meridian's source systems feed Redis. Redis decides. The advisor workbench renders a ranked next-best-action before the client meeting starts, in under ten milliseconds, while the market is still moving.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Addepar</h4><p>Portfolio + performance</p></div>
+<div class="arch-node"><h4>Salesforce FSC</h4><p>Client CRM + household</p></div>
+<div class="arch-node"><h4>BlackRock Aladdin</h4><p>Risk + scenario analytics</p></div>
+<div class="arch-node"><h4>LSEG / Refinitiv</h4><p>Market data, news, ratings</p></div>
+<div class="arch-node"><h4>Plaid</h4><p>Held-away asset aggregation</p></div>
+<div class="arch-node"><h4>Kafka</h4><p>Live portal + market events</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node" style="flex:2"><h4>Redis Data Integration (RDI)</h4><p>CDC from Addepar, Salesforce, Aladdin, core custody. Sub-second sync. Zero custom code.</p></div>
+<div class="arch-node" style="flex:2"><h4>Featureform</h4><p>Feature pipeline from Databricks + Kafka into Redis. One definition, train and serve.</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Client 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live signals</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, household history, embeddings</p></div>
+<div class="arch-node"><h4>Feature Store</h4><p>Pre-computed ML features, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Household Graph</div>
+<div class="arch-data-chip">Drift Counters</div>
+<div class="arch-data-chip">Life Event Flags</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Streams</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Suitability Rules</h4><p>Reg BI, fiduciary guardrails</p></div>
+<div class="arch-node"><h4>NBA Ranker</h4><p>Retention + growth model</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Look-alike household matching</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>Advisor GenAI briefing layer</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Advisor Workbench</h4><p>Salesforce FSC pre-meeting brief</p></div>
+<div class="arch-node"><h4>Client Portal</h4><p>Proactive alerts, talking points</p></div>
+<div class="arch-node"><h4>Mobile App</h4><p>Push notifications, nudges</p></div>
+<div class="arch-node"><h4>Compliance Audit</h4><p>Every recommendation logged</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Advisor accept / reject &rarr; Kafka &rarr; Databricks training &rarr; Retention + growth models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">End-to-End Latency</div><div class="arch-callout-value teal">&lt;10 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Assets Under Management</div><div class="arch-callout-value orange">$180B AUM</div></div>
+<div class="arch-callout"><div class="arch-callout-label">HNW Retention Lift Target</div><div class="arch-callout-value amber">+15-25%</div></div>
+</div>
+</div>
+</div>
+
+<!-- STAGE 2: CLIENT EVENT -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Client Event</div><div class="stage-title">Elena Petrov logs into the client portal at 7:42 AM</div><div class="stage-subtitle">The S&amp;P is down 3.1% pre-market on geopolitical news. A $4.2M HNW client at Meridian opens the portal for the third time in 48 hours, heads straight to the Performance tab, and dwells for 90 seconds. Her advisor's 9:00 AM meeting with her is already on the calendar. Meridian has the window between now and that meeting to decide what the advisor walks in with.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Inbound Client Event</div>
+<div class="client-card"><div class="client-avatar">EP</div><div><div class="client-name">Elena Petrov</div><div class="client-detail">$4.2M AUM | Goal: retirement + legacy | Advisor: J. Thornton | 9:00 AM meeting today</div></div><div class="client-badge">AT-RISK SIGNAL</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">portal_session_start</span></div>
+<div class="data-row"><span class="data-label">Channel</span><span class="data-value">Web portal (desktop)</span></div>
+<div class="data-row"><span class="data-label">Session time</span><span class="data-value orange">7:42 AM ET (pre-market)</span></div>
+<div class="data-row"><span class="data-label">Market context</span><span class="data-value red">S&amp;P 500 -3.1% pre-market</span></div>
+<div class="data-row"><span class="data-label">Session #3 in 48 hours</span><span class="data-value orange">Unusual for this client</span></div>
+<div class="data-row"><span class="data-label">Page path</span><span class="data-value">Home &rarr; Performance &rarr; Holdings</span></div>
+<div class="data-row"><span class="data-label">Dwell time on Performance</span><span class="data-value red">90 seconds (avg: 12s)</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Moment Matters</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Elena is a <strong style="color:var(--mer-gold)">tier-one private client</strong>. $4.2M AUM, 11-year tenure, referred two other households worth $6.8M combined. The kind of client Meridian cannot afford to lose.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">HNW churn is almost never a surprise trade. It is <strong style="color:var(--teal)">months of behavioral drift</strong>: more logins, longer dwells on Performance, held-away balances growing, meeting cancellations. By the time the ACAT request arrives, the decision was made weeks ago.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--red)">The cost of getting this wrong:</strong> Industry HNW attrition runs 5-8% annually. One lost $4.2M household is roughly $42K in lost revenue per year, compounded across a 20-year relationship. Meridian loses $840K in projected fees plus the referral network behind her.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> Addepar holds the portfolio. Salesforce holds the meeting notes. Aladdin holds the risk model. Plaid holds the held-away balances. By the time the advisor stitches them together, the meeting is over and the moment is gone.</div>
+</div></div>
+</div></div>
+
+<!-- STAGE 3: INGEST -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Meridian's data sources flow into Redis</div><div class="stage-subtitle">RDI and Featureform continuously sync from Addepar, Salesforce Financial Services Cloud, Aladdin, Plaid, Refinitiv, and Kafka into a unified low-latency layer. The systems Meridian's advisors already work in stay exactly where they are. Redis sits on top as the serving tier.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:var(--blue)">ADDE<br>PAR</div><div><div class="flow-source">Addepar &middot; Portfolio + Performance</div><div class="flow-detail">Positions | Performance attribution | Multi-custodian roll-up | Private holdings</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,153,255,.15);color:#1E9CFF">SF<br>FSC</div><div><div class="flow-source">Salesforce Financial Services Cloud</div><div class="flow-detail">Household structure | Goals | Meeting history | Service cases | Referral graph</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">ALAD<br>DIN</div><div><div class="flow-source">BlackRock Aladdin &middot; Risk</div><div class="flow-detail">Portfolio risk decomposition | Scenario analysis | Factor exposures | Drift alerts</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">PLAID</div><div><div class="flow-source">Plaid &middot; Held-Away Aggregation</div><div class="flow-detail">Outside brokerage balances | 401k at employer | Direct indexing | Spending patterns</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,188,87,.12);color:var(--amber)">LSEG</div><div><div class="flow-source">LSEG / Refinitiv &middot; Market Data</div><div class="flow-detail">Real-time prices | News sentiment | Analyst ratings | Economic indicators</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">KFK</div><div><div class="flow-source">Kafka &middot; Portal + Behavioral Events</div><div class="flow-detail">Logins | Page dwells | Document downloads | App opens | Cancelled meetings</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,153,0,.12);color:#FF9900">DATA<br>BRKS</div><div><div class="flow-source">Databricks &middot; ML Feature Pipeline</div><div class="flow-detail">Retention model | Wallet share model | Look-alike embeddings | Propensity scores</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Ingest Pipeline Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+<div class="data-row"><span class="data-label">Addepar sync</span><span class="data-value teal">Streaming</span></div>
+<div class="data-row"><span class="data-label">Salesforce FSC sync</span><span class="data-value teal">CDC</span></div>
+<div class="data-row"><span class="data-label">Aladdin risk refresh</span><span class="data-value teal">&lt;60s</span></div>
+<div class="data-row"><span class="data-label">Kafka lag</span><span class="data-value teal">&lt;80ms</span></div>
+<div class="data-row"><span class="data-label">Featureform parity</span><span class="data-value teal">100%</span></div>
+<div class="data-row"><span class="data-label">Custom sync code</span><span class="data-value teal">0 lines</span></div>
+</div>
+<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(220,56,44,.05);border:1px solid rgba(220,56,44,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Additive, not disruptive:</strong> Addepar stays the book of record. Salesforce stays the CRM. Aladdin stays the risk engine. Redis is the operational serving tier that makes all of them act together in real time.</div>
+</div>
+</div></div>
+
+<!-- STAGE 4: CONTEXT ASSEMBLY -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Elena's Client 360 assembles</div><div class="stage-subtitle">Redis assembles the full picture in milliseconds: household history from Addepar and Salesforce, portfolio drift from Aladdin, held-away balances from Plaid, and live behavioral signals from this morning's portal session. What looked like routine browsing in Stage 2 starts to tell a very different story.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span><span class="component-tag">Household Graph</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Household Profile + History</div>
+<div style="margin-bottom:14px">
+<div class="data-label" style="margin-bottom:8px;font-size:12px">Retention Risk Score</div>
+<div class="risk-bar"><div style="width:38%;background:var(--red)"></div><div style="width:27%;background:var(--orange)"></div><div style="width:35%;background:rgba(255,255,255,.08)"></div></div>
+<div class="risk-label"><span style="color:var(--red)">High risk 38%</span><span style="color:var(--orange)">Drift 27%</span><span>Stable 35%</span></div>
+</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">AUM at Meridian</span><span class="data-value gold">$4.2M (11 years)</span></div>
+<div class="data-row"><span class="data-label">Held-away balances (Plaid)</span><span class="data-value orange">$2.7M at Schwab (+$900K YTD)</span></div>
+<div class="data-row"><span class="data-label">Household wallet share</span><span class="data-value red">61% (down from 84%)</span></div>
+<div class="data-row"><span class="data-label">Portfolio drift (Aladdin)</span><span class="data-value amber">8.4% from target allocation</span></div>
+<div class="data-row"><span class="data-label">Goal: retirement in 18 months</span><span class="data-value">Last reviewed 14 months ago</span></div>
+<div class="data-row"><span class="data-label">Referral network</span><span class="data-value gold">2 households, $6.8M combined</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Live Behavioral + Market Signals</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Portal logins (last 14 days)</span><span class="data-value red">9 (baseline: 2)</span></div>
+<div class="data-row"><span class="data-label">Performance tab dwell</span><span class="data-value red">4x baseline</span></div>
+<div class="data-row"><span class="data-label">Last advisor meeting</span><span class="data-value orange">Rescheduled twice, 61 days ago</span></div>
+<div class="data-row"><span class="data-label">Document downloads</span><span class="data-value orange">ACAT form opened (not submitted)</span></div>
+<div class="data-row"><span class="data-label">Market context (LSEG)</span><span class="data-value red">S&amp;P -3.1% | VIX 28</span></div>
+<div class="data-row"><span class="data-label">Concentrated position</span><span class="data-value red">22% in single-name tech (NVDA)</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Household graph hit:</strong> Vector search on look-alike households shows Elena's behavioral pattern matches 87 HNW clients in the last 24 months. 63 of those clients ACAT'd out within 90 days. This is the canary.</div>
+</div>
+</div></div>
+
+<!-- STAGE 5: FEATURE SERVING -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the NBA model</div><div class="stage-subtitle">Featureform pulls every signal the retention and growth models need into a single vector. Household features, portfolio features, behavioral features, and live market context merge in sub-millisecond. No feature lookups during scoring. No training-serving drift.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">WALLET_SHARE_TREND_90D</div><div class="feat-desc">Share of total household wealth at Meridian vs held-away, 90-day trajectory</div><div class="feat-value-row"><span class="feat-value">0.61 (-0.23)</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">PORTAL_ANOMALY_SCORE</div><div class="feat-desc">Behavioral deviation from client's baseline login and dwell pattern</div><div class="feat-value-row"><span class="feat-value">4.2 (sigma)</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">PORTFOLIO_DRIFT_BPS</div><div class="feat-desc">Deviation from IPS target allocation, Aladdin-computed, basis points</div><div class="feat-value-row"><span class="feat-value">840 bps</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">HOUSEHOLD_EMBEDDING_512D</div><div class="feat-desc">Vector embedding of full household profile for look-alike retention modeling</div><div class="feat-value-row"><span class="feat-value">[0.48, -0.22, ...]</span><span class="feat-latency">0.6 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">LIFE_EVENT_PROXIMITY</div><div class="feat-desc">Distance to stated goal milestones (retirement, education, legacy)</div><div class="feat-value-row"><span class="feat-value">18 months</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">CONCENTRATION_RISK_PCT</div><div class="feat-desc">Largest single-name position as percent of portfolio, with sector overlay</div><div class="feat-value-row"><span class="feat-value">22% (NVDA)</span><span class="feat-latency">0.4 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0">
+<div class="viz-panel-title">Feature Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Features Hydrated</div><div style="font-size:26px;font-weight:700;color:var(--text);font-family:var(--mono)">247</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">2.4 ms</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Train / Serve Parity</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Cache Hit Rate</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">99.7%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- STAGE 6: NEXT BEST ACTION RANKING -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Next-Best-Action Ranking</div><div class="stage-title">Top three actions for Elena, ranked for her moment</div><div class="stage-subtitle">Vector Search matches Elena's household embedding against 47,000 historical HNW households. The retention and growth models fire. Suitability rules enforce Reg BI guardrails. Three actions emerge, ranked by weighted lift across retention, wallet share, and client experience.</div><span class="component-tag">NBA Ranker</span><span class="component-tag">Vector Search</span><span class="component-tag">Suitability Rules</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">247 features evaluated</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.12);font-size:12px;color:var(--purple)">47K look-alike households indexed</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,188,87,.06);border:1px solid rgba(255,188,87,.12);font-size:12px;color:var(--amber)">14 candidate actions suppressed (Reg BI)</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 3 surfaced to advisor workbench</div>
+</div>
+<div class="signal-grid">
+<div class="signal-card winner"><div class="signal-rank">#1 Winner</div><div class="signal-source src-crm">Retention Play</div><div class="signal-title">Proactive Portfolio Review</div><div class="signal-meta">Lift: +34% retention | Suitability: cleared</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Upgrade 9:00 AM to a full portfolio review. Lead with YTD performance vs goal, not the pre-market drop. Reframe from loss to glide path.</div><div class="score-bar"><div class="score-fill" style="--score:96%;background:var(--teal)"></div></div><div class="score-label"><span>NBA score</span><span style="color:var(--teal)">0.96</span></div></div>
+<div class="signal-card"><div class="signal-rank">#2 High</div><div class="signal-source src-plaid">Growth Play</div><div class="signal-title">Held-Away Consolidation</div><div class="signal-meta">Lift: +$2.7M AUM | 42% historical close rate</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Propose consolidating the $2.7M at Schwab into a unified managed account with tax-loss harvesting. Frame as "one statement, one plan."</div><div class="score-bar"><div class="score-fill" style="--score:88%;background:var(--blue)"></div></div><div class="score-label"><span>NBA score</span><span style="color:var(--blue)">0.88</span></div></div>
+<div class="signal-card"><div class="signal-rank">#3 High</div><div class="signal-source src-aladdin">Risk Play</div><div class="signal-title">Concentration Unwind</div><div class="signal-meta">22% NVDA | 10-38-52 structured exit plan</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Present a tax-aware 3-tranche unwind of the NVDA position. Aladdin scenario analysis shows 180 bps risk reduction with minimal tax drag.</div><div class="score-bar"><div class="score-fill" style="--score:81%;background:var(--amber)"></div></div><div class="score-label"><span>NBA score</span><span style="color:var(--amber)">0.81</span></div></div>
+</div>
+</div></div>
+
+<!-- STAGE 7: AUM IMPACT -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: AUM Impact</div><div class="stage-title">Retention is half the value. Held-away capture is the other half.</div><div class="stage-subtitle">Most wealth platforms either miss the attrition signal (losing the household) or catch it late (defensive retention only). Redis lets Meridian do both at once: save the relationship and grow the wallet, in the same advisor meeting.</div><span class="component-tag">Retention Model</span><span class="component-tag">Wallet Share Model</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Decision Economics</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Avg HNW household annual revenue</span><span class="data-value gold">~1.0% of AUM ($42K on $4.2M)</span></div>
+<div class="data-row"><span class="data-label">Projected LTV on 20-year retention</span><span class="data-value teal">$840K (at Meridian)</span></div>
+<div class="data-row"><span class="data-label">Held-away consolidation opportunity</span><span class="data-value teal">+$2.7M AUM, +$27K annual revenue</span></div>
+<div class="data-row"><span class="data-label">Referral network at risk</span><span class="data-value amber">2 households, $6.8M combined</span></div>
+<div class="data-row"><span class="data-label">Total household revenue impact</span><span class="data-value gold">$1.36M projected over 20 years</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> The math that matters is not today's meeting. It is the compounding 20-year relationship, plus the held-away capture, plus the two referral households behind Elena. Retention alone is not the product. Retention plus wallet share plus network preservation is the product.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Per-Household Impact</div>
+<div class="rev-compare">
+<div class="rev-card before"><div class="rev-value" style="color:var(--red)">-$840K</div><div class="rev-label">Siloed systems<br>Advisor walks in blind</div></div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">+$1.36M</div><div class="rev-label">Redis-powered NBA<br>Advisor walks in ready</div></div>
+</div>
+<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">Per at-risk household, multiplied across <strong style="color:var(--text)">18,000 HNW relationships</strong> and <strong style="color:var(--text)">$180B AUM</strong> = the retention and growth story in Meridian's board deck.</div>
+</div>
+</div></div>
+
+<!-- STAGE 8: OUTCOME -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Two advisor workbenches. Same client. Same meeting. Very different outcomes.</div><div class="stage-subtitle">Without Redis, the advisor opens Salesforce at 8:55 AM and sees a generic client summary. With Redis, the advisor opens the workbench and sees three ranked actions, each with a talking point, a suitability flag, and projected lift. Same data. Same systems. The difference is that Redis made it all operational.</div></div>
+<div class="outcome-split">
+<!-- GENERIC -->
+<div class="outcome-col">
+<div class="outcome-header generic">Generic Workbench (Today)</div>
+<div class="app-screen generic">
+<div class="app-header"><div class="app-brand">MERIDIAN ADVISOR</div><div class="app-step">MEETING PREP &middot; LOADING</div></div>
+<div class="app-body">
+<div class="app-client"><div class="app-avatar-sm">EP</div><div><div class="app-client-name">Elena Petrov</div><div class="app-client-info">$4.2M AUM &middot; 11 years &middot; 9:00 AM meeting</div></div></div>
+<div class="generic-row"><div class="generic-row-label">Last Contact</div><div class="generic-row-val">Quarterly review, 61 days ago (rescheduled twice)</div></div>
+<div class="generic-row"><div class="generic-row-label">Portfolio Performance</div><div class="generic-row-val">YTD +4.1% | Benchmark +4.7%</div></div>
+<div class="generic-row"><div class="generic-row-label">Meeting Agenda</div><div class="generic-row-val">"Quarterly check-in" (auto-generated)</div></div>
+<div class="generic-row"><div class="generic-row-label">Notes</div><div class="generic-row-val">No recent updates logged</div></div>
+<div class="generic-row" style="background:rgba(220,56,44,.06);border-color:rgba(220,56,44,.2)"><div class="generic-row-label" style="color:#A8261D">Missing</div><div class="generic-row-val" style="color:#A8261D">No held-away visibility. No drift. No behavioral signals. No NBA.</div></div>
+</div>
+</div>
+<div class="outcome-metrics generic-m">
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">61%</div><div class="outcome-metric-label">Wallet share (hidden)</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">-$840K</div><div class="outcome-metric-label">LTV at risk</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">0</div><div class="outcome-metric-label">Proactive actions</div></div>
+</div>
+</div>
+<!-- REDIS -->
+<div class="outcome-col">
+<div class="outcome-header personalized">Redis-Powered Workbench</div>
+<div class="app-screen personalized">
+<div class="app-header"><div class="app-brand">MERIDIAN ADVISOR</div><div class="app-step">BRIEF READY &middot; 8.4 ms</div></div>
+<div class="app-body">
+<div class="app-client"><div class="app-avatar-sm">EP</div><div><div class="app-client-name">Elena Petrov</div><div class="app-client-info">RETENTION RISK &middot; 9:00 AM in 4 min</div></div></div>
+<div class="nba-block hero">
+<div class="nba-label">#1 Next Best Action</div>
+<div class="nba-title">Proactive Portfolio Review (not status check)</div>
+<div class="nba-detail">Open with YTD +4.1% vs her $6M retirement target glide path. Reframe pre-market drop. Retention lift: +34%.</div>
+</div>
+<div class="nba-block">
+<div class="nba-label">#2 Growth Play</div>
+<div class="nba-title">$2.7M Held-Away at Schwab &middot; Consolidate</div>
+<div class="nba-detail">Wallet share down 23 pts in 90 days. Frame: "one plan, tax-aware." Historical close rate: 42%.</div>
+</div>
+<div class="nba-block">
+<div class="nba-label">#3 Risk Play</div>
+<div class="nba-title">22% NVDA concentration &middot; 3-tranche unwind</div>
+<div class="nba-detail">Aladdin: 180 bps risk reduction. Tax-aware 10-38-52 exit. Suitability cleared.</div>
+</div>
+</div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">+$2.7M</div><div class="outcome-metric-label">AUM in-play</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">+$1.36M</div><div class="outcome-metric-label">20-yr LTV preserved</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">8.4 ms</div><div class="outcome-metric-label">End-to-end</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- STAGE 9: ARCHITECTURE RECAP -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under ten milliseconds. One advisor walking into the right meeting.</div><div class="stage-subtitle">Every component you just saw, running together. Addepar, Salesforce, Aladdin, Plaid, and Refinitiv feed Redis. Redis decides. The advisor workbench renders three ranked actions before the 9:00 AM meeting starts. The result is measurable retention, measurable wallet share capture, and a single operational layer that sits on top of the systems Meridian already owns.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Addepar</h4><p>Portfolio + performance</p></div>
+<div class="arch-node"><h4>Salesforce FSC</h4><p>Client CRM + household</p></div>
+<div class="arch-node"><h4>BlackRock Aladdin</h4><p>Risk + scenario analytics</p></div>
+<div class="arch-node"><h4>LSEG / Refinitiv</h4><p>Market data, news, ratings</p></div>
+<div class="arch-node"><h4>Plaid</h4><p>Held-away asset aggregation</p></div>
+<div class="arch-node"><h4>Kafka</h4><p>Live portal + market events</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node" style="flex:2"><h4>Redis Data Integration (RDI)</h4><p>CDC from Addepar, Salesforce, Aladdin, core custody. Sub-second sync. Zero custom code.</p></div>
+<div class="arch-node" style="flex:2"><h4>Featureform</h4><p>Feature pipeline from Databricks + Kafka into Redis. One definition, train and serve.</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Client 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live signals</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, household history, embeddings</p></div>
+<div class="arch-node"><h4>Feature Store</h4><p>Pre-computed ML features, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Household Graph</div>
+<div class="arch-data-chip">Drift Counters</div>
+<div class="arch-data-chip">Life Event Flags</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Streams</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Suitability Rules</h4><p>Reg BI, fiduciary guardrails</p></div>
+<div class="arch-node"><h4>NBA Ranker</h4><p>Retention + growth model</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Look-alike household matching</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>Advisor GenAI briefing layer</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Advisor Workbench</h4><p>Salesforce FSC pre-meeting brief</p></div>
+<div class="arch-node"><h4>Client Portal</h4><p>Proactive alerts, talking points</p></div>
+<div class="arch-node"><h4>Mobile App</h4><p>Push notifications, nudges</p></div>
+<div class="arch-node"><h4>Compliance Audit</h4><p>Every recommendation logged</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Advisor accept / reject &rarr; Kafka &rarr; Databricks training &rarr; Retention + growth models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Pipeline Latency (P99)</div><div class="arch-callout-value teal">8.4 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">HNW Retention Lift</div><div class="arch-callout-value orange">+15-25%</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Wallet Share Capture</div><div class="arch-callout-value amber">+$2.1B AUM / yr</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.2ms','1.4ms','2.8ms','5.1ms','7.2ms','8.0ms','8.4ms','8.4ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
