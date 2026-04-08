@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | Experian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --exp-blue:#26478D;--exp-purple:#41338C;
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:780px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.08s}.flow-item:nth-child(2){animation-delay:.16s}.flow-item:nth-child(3){animation-delay:.24s}.flow-item:nth-child(4){animation-delay:.32s}.flow-item:nth-child(5){animation-delay:.4s}.flow-item:nth-child(6){animation-delay:.48s}.flow-item:nth-child(7){animation-delay:.56s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:46px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px;text-align:center;line-height:1}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.risk-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
+.risk-bar div{height:100%}
+.risk-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
+.applicant-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.applicant-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--exp-blue),var(--exp-purple));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
+.applicant-name{font-size:17px;font-weight:700}.applicant-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.applicant-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(0,201,167,.12);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.applicant-badge.suspect{background:rgba(220,56,44,.12);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+/* Risk signal cards (for ranking stage) */
+.signal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.signal-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.signal-card:nth-child(1){animation-delay:.15s}.signal-card:nth-child(2){animation-delay:.3s}.signal-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.signal-card.alert{border-color:var(--red);background:rgba(220,56,44,.05);box-shadow:0 0 24px rgba(220,56,44,.08)}
+.signal-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.signal-card.alert .signal-rank{color:var(--red)}
+.signal-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.signal-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.signal-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-clearsale{background:rgba(79,140,255,.15);color:var(--blue)}
+.src-neuroid{background:rgba(167,139,250,.15);color:var(--purple)}
+.src-resistant{background:rgba(220,56,44,.15);color:var(--red)}
+.src-bureau{background:rgba(0,201,167,.15);color:var(--teal)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+/* Cost / impact stage */
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+/* Architecture (matches Landing Page) */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+.arch-callout-value.red{color:var(--red)}
+/* Feature serving */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Application UI mockups */
+.app-screen{background:#FAFBFC;border-radius:14px;border:2px solid #333;overflow:hidden;position:relative;color:#1A1A1A}
+.app-screen.declined{border-color:rgba(220,56,44,.5)}
+.app-screen.approved{border-color:rgba(0,201,167,.4)}
+.app-header{padding:18px 24px;background:var(--exp-blue);display:flex;align-items:center;justify-content:space-between}
+.app-brand{color:#fff;font-size:14px;font-weight:800;letter-spacing:.5px}
+.app-step{color:rgba(255,255,255,.7);font-size:11px;font-family:var(--mono)}
+.app-body{padding:24px}
+.app-applicant{display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px solid #E5E7EB;margin-bottom:18px}
+.app-avatar-sm{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--exp-blue),var(--exp-purple));color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.app-applicant-name{font-size:14px;font-weight:700;color:#1A1A1A}
+.app-applicant-info{font-size:11px;color:#6B7280;margin-top:2px;font-family:var(--mono)}
+.app-fields{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.app-field{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6}
+.app-field-label{color:#6B7280}
+.app-field-value{color:#1A1A1A;font-weight:600;font-family:var(--mono)}
+.app-decision{padding:18px;border-radius:10px;text-align:center;margin-top:18px}
+.app-decision.approve{background:rgba(0,201,167,.08);border:2px solid rgba(0,201,167,.3)}
+.app-decision.decline{background:rgba(220,56,44,.06);border:2px solid rgba(220,56,44,.3)}
+.app-decision-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
+.app-decision.approve .app-decision-label{color:var(--teal)}
+.app-decision.decline .app-decision-label{color:var(--red)}
+.app-decision-value{font-size:22px;font-weight:800;letter-spacing:.5px}
+.app-decision.approve .app-decision-value{color:#00876A}
+.app-decision.decline .app-decision-value{color:#A8261D}
+.app-decision-detail{font-size:11px;color:#6B7280;margin-top:6px}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+/* Nav */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.signal-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | Experian</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Application Submitted</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Risk Scoring</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Loss Avoidance</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Experian's Real-Time Fraud Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Experian's source systems feed Redis. Redis decides. The credit application receives an Approve, Step-Up, or Decline in under 10 milliseconds, before the fraudster knows they have been caught.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Mainframe / DB2</h4><p>Bureau core (migrating)</p></div>
+<div class="arch-node"><h4>AWS Data Lake</h4><p>100PB consumer files</p></div>
+<div class="arch-node"><h4>ClearSale</h4><p>E-commerce fraud signals</p></div>
+<div class="arch-node"><h4>NeuroID</h4><p>Behavioral / device</p></div>
+<div class="arch-node"><h4>Resistant AI</h4><p>Mule networks / APP fraud</p></div>
+<div class="arch-node"><h4>Kafka + External APIs</h4><p>Live events, SSA, telco</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node" style="flex:3"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from DB2, S3, ClearSale, NeuroID, Resistant AI, Kafka. Sub-second sync. Zero custom code.</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Identity 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live signals</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, identity graph, embeddings</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Identity Graph</div>
+<div class="arch-data-chip">Velocity Counters</div>
+<div class="arch-data-chip">Bloom Filters</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Streams</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Policy</h4><p>SR 11-7, regulatory guardrails</p></div>
+<div class="arch-node"><h4>Fraud ML Model</h4><p>Synthetic ID detection</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Identity similarity matching</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>GenAI explanation layer</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Ascend Platform</h4><p>1,500+ B2B clients</p></div>
+<div class="arch-node"><h4>Lender APIs</h4><p>Approve / Step-Up / Decline</p></div>
+<div class="arch-node"><h4>Case Management</h4><p>Investigator queue</p></div>
+<div class="arch-node"><h4>Consumer Notifications</h4><p>Identity alerts</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kafka &rarr; AWS data lake / Databricks training &rarr; Updated fraud models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">End-to-End Latency</div><div class="arch-callout-value teal">&lt;10 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Daily Decisions</div><div class="arch-callout-value orange">14M+ credit reports</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Synthetic ID Loss Reduction Target</div><div class="arch-callout-value amber">20-40% lift</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: APPLICATION SUBMITTED ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Application Submitted</div><div class="stage-title">"Marcus Reeves" applies for a $15,000 credit card</div><div class="stage-subtitle">An application hits a national lender's portal at 2:47 AM. On paper it looks clean: valid SSN, recent address, thin but active credit file. The Experian fraud platform has under 10 milliseconds to figure out that Marcus Reeves does not exist.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Inbound Application Event</div>
+<div class="applicant-card"><div class="applicant-avatar">MR</div><div><div class="applicant-name">Marcus Reeves</div><div class="applicant-detail">SSN ending 4471 | Age 31 | Phoenix, AZ | $15,000 unsecured credit line request</div></div><div class="applicant-badge suspect">UNDER REVIEW</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">application_submit</span></div>
+<div class="data-row"><span class="data-label">Channel</span><span class="data-value">Lender web portal (mobile)</span></div>
+<div class="data-row"><span class="data-label">Submission time</span><span class="data-value orange">2:47 AM local (off-hours)</span></div>
+<div class="data-row"><span class="data-label">SSN status</span><span class="data-value teal">Valid format, issued 1993</span></div>
+<div class="data-row"><span class="data-label">Credit file</span><span class="data-value">Thin: 3 tradelines, 18 months</span></div>
+<div class="data-row"><span class="data-label">Stated income</span><span class="data-value">$92,000</span></div>
+<div class="data-row"><span class="data-label">Requested limit</span><span class="data-value amber">$15,000 unsecured</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Application Is Dangerous</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">On paper, "Marcus Reeves" passes every static check. Valid SSN. Real address. Active tradelines. A traditional decline rule would <strong style="color:var(--orange)">approve this application</strong>.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">But synthetic identities are not built in a day. They are <strong style="color:var(--teal)">cultivated for 18-36 months</strong> with small purchases on authorized-user accounts to build a thin but real credit file. Then they bust out for $15K-$50K and disappear.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--red)">The cost of getting this wrong:</strong> Approve, and Experian's lender client takes a $15K bust-out loss. Decline a real customer, and you generate a false positive that costs more than the fraud itself for 61% of businesses.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> Bureau lookup hits the mainframe. Fraud signals from ClearSale, NeuroID, and Resistant AI live in separate systems with separate latencies. By the time the lender stitches them together, the decision window has closed and the application is approved.</div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Experian's data sources flow into Redis</div><div class="stage-subtitle">RDI continuously syncs from the mainframe, the AWS data lake, all three fraud acquisitions, and live event streams into a unified low-latency layer. Legacy core systems and modern fraud platforms converge in one place, in real time.</div><span class="component-tag">Redis Data Integration (RDI)</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,255,255,.08);color:#9CA3AF">DB2<br>z/OS</div><div><div class="flow-source">Mainframe / DB2 &middot; Bureau Core</div><div class="flow-detail">250M+ consumer files | Tradelines | Inquiries | Public records | Migrating to AWS under 10-yr agreement</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,153,0,.12);color:#FF9900">AWS<br>Lake</div><div><div class="flow-source">AWS Data Lake (S3 + Snowflake)</div><div class="flow-detail">100+ PB of consumer data, fraud history, ML embeddings, model features</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:var(--blue)">CLR<br>SALE</div><div><div class="flow-source">ClearSale &middot; E-commerce Fraud Signals</div><div class="flow-detail">Cross-merchant transaction patterns | Card-not-present risk scoring | LATAM coverage</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">NEU<br>ROID</div><div><div class="flow-source">NeuroID &middot; Behavioral Analytics</div><div class="flow-detail">Keystroke dynamics | Mouse / touch patterns | Form-fill velocity | Device fingerprinting</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">RST<br>AI</div><div><div class="flow-source">Resistant AI &middot; Mule Network Detection</div><div class="flow-detail">APP fraud models | Money mule rings | Document tampering | Synthetic ID clusters</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KFK</div><div><div class="flow-source">Kafka &middot; Live Application Events</div><div class="flow-detail">Real-time application submissions | Step-up auth events | Decision logs from 1,500+ Ascend clients</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,188,87,.12);color:var(--amber)">EXT<br>API</div><div><div class="flow-source">External Identity APIs</div><div class="flow-detail">SSA Death Master | USPS NCOA | Telco / carrier line ownership | Utility records</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+<div class="data-row"><span class="data-label">DB2 mainframe sync</span><span class="data-value teal">Streaming</span></div>
+<div class="data-row"><span class="data-label">AWS lake sync</span><span class="data-value teal">CDC</span></div>
+<div class="data-row"><span class="data-label">Fraud acquisitions</span><span class="data-value teal">3 unified</span></div>
+<div class="data-row"><span class="data-label">Kafka lag</span><span class="data-value teal">&lt;80ms</span></div>
+<div class="data-row"><span class="data-label">External API freshness</span><span class="data-value teal">&lt;5 min</span></div>
+<div class="data-row"><span class="data-label">Custom sync code</span><span class="data-value teal">0 lines</span></div>
+</div>
+<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(220,56,44,.05);border:1px solid rgba(220,56,44,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Acquisition unification:</strong> ClearSale, NeuroID, and Resistant AI each have their own data model. RDI normalizes them into a single Identity 360 in Redis. No rip-and-replace.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT BUILD ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Marcus Reeves's Identity 360 assembles</div><div class="stage-subtitle">Redis assembles the full picture in milliseconds: bureau history from the mainframe, behavioral signals from NeuroID, network context from Resistant AI, and live velocity counters. What looked clean in Stage 2 starts to fall apart.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span><span class="component-tag">Identity Graph</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Bureau + Identity History</div>
+<div style="margin-bottom:14px">
+<div class="data-label" style="margin-bottom:8px;font-size:12px">Identity Confidence Score</div>
+<div class="risk-bar"><div style="width:34%;background:var(--red)"></div><div style="width:24%;background:var(--orange)"></div><div style="width:42%;background:rgba(255,255,255,.08)"></div></div>
+<div class="risk-label"><span style="color:var(--red)">High risk 34%</span><span style="color:var(--orange)">Anomaly 24%</span><span>Confidence 42%</span></div>
+</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">SSN issued</span><span class="data-value orange">1993 (issued at age 17)</span></div>
+<div class="data-row"><span class="data-label">First credit activity</span><span class="data-value red">2024 (31-yr gap)</span></div>
+<div class="data-row"><span class="data-label">Address history depth</span><span class="data-value orange">14 months only</span></div>
+<div class="data-row"><span class="data-label">Authorized-user history</span><span class="data-value red">3 piggyback adds in 2024</span></div>
+<div class="data-row"><span class="data-label">Phone line ownership</span><span class="data-value red">Prepaid, 4 weeks old</span></div>
+<div class="data-row"><span class="data-label">Utility / telco records</span><span class="data-value red">No match</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Behavioral + Network Signals (Live)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">NeuroID typing pattern</span><span class="data-value red">Copy-paste detected (SSN field)</span></div>
+<div class="data-row"><span class="data-label">NeuroID device fingerprint</span><span class="data-value orange">Seen on 4 prior applications</span></div>
+<div class="data-row"><span class="data-label">Resistant AI cluster</span><span class="data-value red">Linked to known mule ring</span></div>
+<div class="data-row"><span class="data-label">ClearSale velocity</span><span class="data-value orange">7 applications in 72 hours</span></div>
+<div class="data-row"><span class="data-label">Submission hour</span><span class="data-value orange">2:47 AM (off-hours pattern)</span></div>
+<div class="data-row"><span class="data-label">IP geolocation</span><span class="data-value red">Datacenter / residential proxy</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Identity graph hit:</strong> Resistant AI links this device fingerprint to 4 other thin-file applications submitted from the same IP cluster in the last 72 hours. This is not Marcus Reeves. This is a synthetic identity ring.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the fraud model</div><div class="stage-subtitle">Featureform pulls every signal the synthetic identity model needs into a single vector. Bureau features, behavioral features, network features, and live velocity counters merge in sub-millisecond. No feature lookups during scoring.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">SSN_FIRST_USE_GAP_YEARS</div><div class="feat-desc">Years between SSN issuance and first credit activity. Synthetic IDs cultivate dormant SSNs.</div><div class="feat-value-row"><span class="feat-value">31</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">PIGGYBACK_TRADELINE_RATIO</div><div class="feat-desc">Ratio of authorized-user tradelines to primary tradelines in last 24 months</div><div class="feat-value-row"><span class="feat-value">1.0 (3 of 3)</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">DEVICE_FP_VELOCITY_72H</div><div class="feat-desc">Distinct identities seen on this device fingerprint in 72 hours (NeuroID)</div><div class="feat-value-row"><span class="feat-value">5</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">MULE_NETWORK_DISTANCE</div><div class="feat-desc">Graph distance to nearest known mule cluster (Resistant AI)</div><div class="feat-value-row"><span class="feat-value">1 hop</span><span class="feat-latency">0.6 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">IDENTITY_EMBEDDING_768D</div><div class="feat-desc">Vector embedding of full identity profile for similarity search against known synthetics</div><div class="feat-value-row"><span class="feat-value">[0.72, -0.41, ...]</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">UTILITY_TELCO_MATCH_SCORE</div><div class="feat-desc">Cross-validation against telco line ownership and utility records</div><div class="feat-value-row"><span class="feat-value">0.0 (no match)</span><span class="feat-latency">0.3 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0">
+<div class="viz-panel-title">Feature Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Features Hydrated</div><div style="font-size:26px;font-weight:700;color:var(--text);font-family:var(--mono)">312</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">2.1 ms</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Train / Serve Parity</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Cache Hit Rate</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">99.6%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: RISK SCORING ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Risk Scoring</div><div class="stage-title">Top fraud signals scored in real time</div><div class="stage-subtitle">Vector Search compares Marcus Reeves's identity embedding against known synthetic ID clusters. The fraud model fires. Three signals push this application from "thin file" to "confirmed synthetic identity."</div><span class="component-tag">Vector Search</span><span class="component-tag">Fraud ML Model</span><span class="component-tag">Bloom Filters</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">312 features evaluated</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.12);font-size:12px;color:var(--purple)">2.4M known synthetic IDs in vector index</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">Top 3 risk signals surfaced</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Final score: 0.94 / 1.00</div>
+</div>
+<div class="signal-grid">
+<div class="signal-card alert"><div class="signal-rank">#1 Critical</div><div class="signal-source src-resistant">Resistant AI</div><div class="signal-title">Mule Network Match</div><div class="signal-meta">Graph distance: 1 hop | Cluster size: 14 identities</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Device fingerprint matches a known synthetic ID cluster active in Phoenix metro area. 4 prior bust-outs.</div><div class="score-bar"><div class="score-fill" style="--score:97%;background:var(--red)"></div></div><div class="score-label"><span>Risk weight</span><span style="color:var(--red)">0.97</span></div></div>
+<div class="signal-card alert"><div class="signal-rank">#2 High</div><div class="signal-source src-bureau">Bureau History</div><div class="signal-title">SSN Cultivation Pattern</div><div class="signal-meta">31-year SSN dormancy | 100% piggyback tradelines</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">SSN issued 1993, first credit use 2024. All 3 tradelines are authorized-user adds. Classic synthetic build.</div><div class="score-bar"><div class="score-fill" style="--score:91%;background:var(--orange)"></div></div><div class="score-label"><span>Risk weight</span><span style="color:var(--orange)">0.91</span></div></div>
+<div class="signal-card alert"><div class="signal-rank">#3 High</div><div class="signal-source src-neuroid">NeuroID</div><div class="signal-title">Behavioral Anomaly</div><div class="signal-meta">Copy-paste SSN | 5 identities on device | Datacenter IP</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Applicant pasted SSN rather than typing it. Same device used for 4 other thin-file applications this week.</div><div class="score-bar"><div class="score-fill" style="--score:88%;background:var(--amber)"></div></div><div class="score-label"><span>Risk weight</span><span style="color:var(--amber)">0.88</span></div></div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 7: LOSS AVOIDANCE ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Loss Avoidance</div><div class="stage-title">Catching fraud is half the value. Not generating false positives is the other half.</div><div class="stage-subtitle">Most fraud platforms either over-decline (killing real customers) or under-decline (eating losses). The Redis-powered model uses every signal in the Identity 360 to do both: catch synthetic IDs and let real thin-file customers through.</div><span class="component-tag">Fraud ML</span><span class="component-tag">Quality Floor</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Decision Logic</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Synthetic ID confirmed loss</span><span class="data-value red">$15K bust-out per approval</span></div>
+<div class="data-row"><span class="data-label">False positive cost (lost good customer)</span><span class="data-value amber">$340 acquisition cost + LTV loss</span></div>
+<div class="data-row"><span class="data-label">Industry stat (Experian research)</span><span class="data-value">61% say false positives cost more than fraud</span></div>
+<div class="data-row"><span class="data-label">Decision threshold</span><span class="data-value">Approve &lt;0.40 | Step-Up 0.40-0.75 | Decline &gt;0.75</span></div>
+<div class="data-row"><span class="data-label">Marcus Reeves score</span><span class="data-value red">0.94 (Decline)</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> A thin-file applicant with a 31-year SSN gap looks identical to a young immigrant building credit, on paper. The difference is in the behavioral and network signals from NeuroID and Resistant AI. Without those, you either approve the synthetic or decline the immigrant. With Redis unifying all three, you get both right.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Per-Application Impact</div>
+<div class="rev-compare">
+<div class="rev-card before"><div class="rev-value" style="color:var(--red)">-$15,000</div><div class="rev-label">Siloed scoring<br>Approves the synthetic</div></div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">+$15,000</div><div class="rev-label">Redis unified scoring<br>Catches the synthetic</div></div>
+</div>
+<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">Per application loss avoided, multiplied across <strong style="color:var(--text)">14M daily decisions</strong> and 1,500+ Ascend clients = the $15M-$35M annual fraud loss reduction in your value hypothesis.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Two applications. One synthetic. One real. Both decided in under ten milliseconds.</div><div class="stage-subtitle">The synthetic identity is declined before the bust-out happens. The thin-file legitimate customer is approved with full confidence. Same model. Same milliseconds. The difference is the unified Identity 360 in Redis.</div></div>
+<div class="outcome-split">
+<!-- DECLINED -->
+<div class="outcome-col">
+<div class="outcome-header generic" style="background:rgba(220,56,44,.08);color:var(--red);border-color:rgba(220,56,44,.2)">Synthetic Identity (Declined)</div>
+<div class="app-screen declined">
+<div class="app-header"><div class="app-brand">EXPERIAN ASCEND</div><div class="app-step">DECISION COMPLETE &middot; 8.2 ms</div></div>
+<div class="app-body">
+<div class="app-applicant"><div class="app-avatar-sm">MR</div><div><div class="app-applicant-name">Marcus Reeves</div><div class="app-applicant-info">SSN ****4471 &middot; Phoenix, AZ &middot; $15,000 request</div></div></div>
+<div class="app-fields">
+<div class="app-field"><span class="app-field-label">Bureau score</span><span class="app-field-value">671 (thin file)</span></div>
+<div class="app-field"><span class="app-field-label">Synthetic ID risk</span><span class="app-field-value" style="color:#A8261D">0.94 / 1.00</span></div>
+<div class="app-field"><span class="app-field-label">Mule network match</span><span class="app-field-value" style="color:#A8261D">Cluster +1 hop</span></div>
+<div class="app-field"><span class="app-field-label">NeuroID anomaly</span><span class="app-field-value" style="color:#A8261D">Copy-paste + device reuse</span></div>
+<div class="app-field"><span class="app-field-label">SSN cultivation</span><span class="app-field-value" style="color:#A8261D">31-yr dormancy</span></div>
+</div>
+<div class="app-decision decline"><div class="app-decision-label">Decision</div><div class="app-decision-value">DECLINE</div><div class="app-decision-detail">Routed to fraud investigator queue. Cluster flagged for proactive monitoring.</div></div>
+</div>
+</div>
+<div class="outcome-metrics generic-m" style="background:rgba(220,56,44,.05);border-color:rgba(220,56,44,.15)">
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">$15,000</div><div class="outcome-metric-label">Bust-out loss avoided</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">14</div><div class="outcome-metric-label">Cluster IDs flagged</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">8.2 ms</div><div class="outcome-metric-label">End-to-end</div></div>
+</div>
+</div>
+<!-- APPROVED -->
+<div class="outcome-col">
+<div class="outcome-header personalized">Real Thin-File Customer (Approved)</div>
+<div class="app-screen approved">
+<div class="app-header" style="background:#00876A"><div class="app-brand">EXPERIAN ASCEND</div><div class="app-step">DECISION COMPLETE &middot; 7.9 ms</div></div>
+<div class="app-body">
+<div class="app-applicant"><div class="app-avatar-sm" style="background:linear-gradient(135deg,#00876A,#00C9A7)">PS</div><div><div class="app-applicant-name">Priya Sharma</div><div class="app-applicant-info">SSN ****8823 &middot; Austin, TX &middot; $8,000 request</div></div></div>
+<div class="app-fields">
+<div class="app-field"><span class="app-field-label">Bureau score</span><span class="app-field-value">684 (thin file)</span></div>
+<div class="app-field"><span class="app-field-label">Synthetic ID risk</span><span class="app-field-value" style="color:#00876A">0.08 / 1.00</span></div>
+<div class="app-field"><span class="app-field-label">Mule network match</span><span class="app-field-value" style="color:#00876A">No match</span></div>
+<div class="app-field"><span class="app-field-label">NeuroID behavior</span><span class="app-field-value" style="color:#00876A">Native typing pattern</span></div>
+<div class="app-field"><span class="app-field-label">Telco / utility match</span><span class="app-field-value" style="color:#00876A">Verified, 26 months</span></div>
+</div>
+<div class="app-decision approve"><div class="app-decision-label">Decision</div><div class="app-decision-value">APPROVE</div><div class="app-decision-detail">Same thin-file profile. Real human. No friction. Customer preserved.</div></div>
+</div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">$0</div><div class="outcome-metric-label">False positive cost</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">+1</div><div class="outcome-metric-label">Customer preserved</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">7.9 ms</div><div class="outcome-metric-label">End-to-end</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under ten milliseconds. Two correct decisions.</div><div class="stage-subtitle">Every component you just saw running together. The mainframe, the AWS data lake, ClearSale, NeuroID, and Resistant AI feed Redis. Redis decides. Ascend renders the decision to the lender. The result is more fraud caught, fewer false positives, and a unified path for three acquisitions that previously lived in silos.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Mainframe / DB2</h4><p>Bureau core (migrating)</p></div>
+<div class="arch-node"><h4>AWS Data Lake</h4><p>100PB consumer files</p></div>
+<div class="arch-node"><h4>ClearSale</h4><p>E-commerce fraud signals</p></div>
+<div class="arch-node"><h4>NeuroID</h4><p>Behavioral / device</p></div>
+<div class="arch-node"><h4>Resistant AI</h4><p>Mule networks / APP fraud</p></div>
+<div class="arch-node"><h4>Kafka + External APIs</h4><p>Live events, SSA, telco</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node" style="flex:3"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from DB2, S3, ClearSale, NeuroID, Resistant AI, Kafka. Sub-second sync. Zero custom code.</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Identity 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live signals</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, identity graph, embeddings</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Identity Graph</div>
+<div class="arch-data-chip">Velocity Counters</div>
+<div class="arch-data-chip">Bloom Filters</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Streams</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Policy</h4><p>SR 11-7, regulatory guardrails</p></div>
+<div class="arch-node"><h4>Fraud ML Model</h4><p>Synthetic ID detection</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Identity similarity matching</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>GenAI explanation layer</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Ascend Platform</h4><p>1,500+ B2B clients</p></div>
+<div class="arch-node"><h4>Lender APIs</h4><p>Approve / Step-Up / Decline</p></div>
+<div class="arch-node"><h4>Case Management</h4><p>Investigator queue</p></div>
+<div class="arch-node"><h4>Consumer Notifications</h4><p>Identity alerts</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Kafka &rarr; AWS data lake / Databricks training &rarr; Updated fraud models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Pipeline Latency (P99)</div><div class="arch-callout-value teal">8.2 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Fraud Detection Lift</div><div class="arch-callout-value orange">+20-40%</div></div>
+<div class="arch-callout"><div class="arch-callout-label">False Positive Reduction</div><div class="arch-callout-value amber">50-60%</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.2ms','1.4ms','2.8ms','5.0ms','7.1ms','7.9ms','8.2ms','8.2ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
