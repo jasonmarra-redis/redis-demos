@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Search Intelligence Demo | Best Buy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --bb-yellow:#FFE000;--bb-blue:#003B8E;
+  --bg:#060A10;--bg2:#0C1018;--bg3:#121824;--border:rgba(255,255,255,.07);
+  --text:#EDF0F7;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Sora',sans-serif;
+  --orange:#F97316;--green:#22C55E;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(6,10,16,.97);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:22px;font-weight:800;color:var(--red);letter-spacing:-.5px}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:13px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.07);border:1px solid rgba(0,201,167,.18);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+
+/* PROGRESS */
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+
+/* STAGE LAYOUT */
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .55s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:30px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:32px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:15px;color:var(--text2);line-height:1.65;max-width:800px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+
+/* VIZ */
+.viz-area{flex:1;display:flex;gap:22px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:8px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}.data-row:nth-child(8){animation-delay:.66s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}.data-value.green{color:var(--green)}
+
+/* FLOW ITEMS */
+.flow-container{display:flex;flex-direction:column;gap:10px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+
+/* PERSONA CARD */
+.persona-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.persona-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,#1a56db,#4F8CFF);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.persona-name{font-size:17px;font-weight:700}.persona-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.persona-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(79,140,255,.12);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+
+/* FEATURE CARDS */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+
+/* SEARCH RESULTS CARDS */
+.result-grid{display:flex;flex-direction:column;gap:10px}
+.result-card{border-radius:10px;padding:16px 18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;display:flex;gap:14px;align-items:flex-start}
+.result-card:nth-child(1){animation-delay:.15s}.result-card:nth-child(2){animation-delay:.3s}.result-card:nth-child(3){animation-delay:.45s}
+.result-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.07)}
+.result-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:6px;letter-spacing:1px;text-transform:uppercase}
+.result-card.winner .result-rank{color:var(--teal)}
+.result-product{flex:1}
+.result-title{font-size:14px;font-weight:700;margin-bottom:3px}
+.result-meta{font-size:11px;color:var(--text3);margin-bottom:8px}
+.result-why{font-size:11px;color:var(--text2);line-height:1.4;margin-bottom:8px}
+.result-score-row{display:flex;gap:10px;flex-wrap:wrap}
+.score-chip{padding:3px 9px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono)}
+.chip-hybrid{background:rgba(0,201,167,.12);color:var(--teal)}
+.chip-lexical{background:rgba(79,140,255,.12);color:var(--blue)}
+.chip-vector{background:rgba(167,139,250,.12);color:var(--purple)}
+.chip-boost{background:rgba(255,188,87,.12);color:var(--amber)}
+.result-thumb{width:52px;height:52px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px}
+
+/* SCORE BAR */
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:4px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+
+/* REVENUE / COMPARE */
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:26px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+
+/* ARCHITECTURE */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:16px}
+.arch-frame{flex:1;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:32px 28px 24px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:13px 13px;text-align:center;border:1px solid;min-height:60px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:12px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:5px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:8px 7px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:12px;padding:11px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}.arch-callout-value.orange{color:var(--orange)}.arch-callout-value.amber{color:var(--amber)}.arch-callout-value.green{color:var(--green)}
+
+/* OUTCOME SPLIT */
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+
+/* BB SEARCH MOCKUP */
+.bb-screen{background:#0A0A0A;border-radius:14px;border:1px solid #2a2a2a;overflow:hidden;position:relative}
+.bb-header{background:#081e4d;padding:12px 18px;display:flex;align-items:center;gap:12px}
+.bb-logo-mark{font-size:14px;font-weight:800;color:var(--bb-yellow);font-family:var(--mono);letter-spacing:-.5px}
+.bb-search-bar{flex:1;background:rgba(255,255,255,.1);border-radius:6px;padding:7px 14px;font-size:12px;color:rgba(255,255,255,.7);font-family:var(--mono)}
+.bb-results-area{padding:14px 18px}
+.bb-result-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:8px;margin-bottom:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)}
+.bb-result-img{width:36px;height:36px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;background:rgba(255,255,255,.06)}
+.bb-result-name{font-size:12px;font-weight:600;color:#e8e8e8}
+.bb-result-price{font-size:11px;color:#FFE000;font-family:var(--mono);font-weight:700;margin-top:2px}
+.bb-result-row.top-pick{border-color:rgba(0,201,167,.3);background:rgba(0,201,167,.05)}
+.bb-result-badge{margin-left:auto;padding:3px 8px;border-radius:4px;font-size:9px;font-weight:700;font-family:var(--mono)}
+.badge-match{background:rgba(0,201,167,.15);color:var(--teal)}
+.badge-generic{background:rgba(255,255,255,.07);color:var(--text3)}
+.bb-latency-bar{padding:10px 18px;background:rgba(255,255,255,.025);border-top:1px solid rgba(255,255,255,.05);display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px}
+.lat-before{color:#DC382C;font-weight:700}
+.lat-after{color:var(--teal);font-weight:700}
+
+/* NAV */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(6,10,16,.97);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+
+/* LATENCY CALLOUT BLOCK */
+.latency-callout{display:flex;gap:14px;margin-top:16px}
+.lat-block{flex:1;padding:16px;border-radius:10px;text-align:center}
+.lat-block.bad{background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.15)}
+.lat-block.good{background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.15)}
+.lat-num{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1;margin-bottom:4px}
+.lat-block.bad .lat-num{color:var(--red)}
+.lat-block.good .lat-num{color:var(--teal)}
+.lat-lbl{font-size:11px;color:var(--text3)}
+
+@media(max-width:900px){
+  .topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}
+  .stage-title{font-size:24px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}
+  .feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}
+  .progress-step span{display:none}.latency-callout{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="redis-logo">Redis</div>
+    <div class="topbar-divider"></div>
+    <div class="topbar-title">Real-Time Search Intelligence Demo | Best Buy</div>
+  </div>
+  <div class="topbar-right">
+    <div class="latency-display">
+      <div class="latency-dot"></div>
+      <span class="latency-label">Pipeline</span>
+      <span class="latency-value" id="globalLatency">--</span>
+    </div>
+    <div class="stage-counter" id="stageCounter">1 / 9</div>
+  </div>
+</div>
+
+<!-- PROGRESS BAR -->
+<div class="progress-track" id="progressTrack">
+  <div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+  <div class="progress-step" data-step="1"><div class="step-num">2</div><span>Search Query</span></div>
+  <div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+  <div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+  <div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+  <div class="progress-step" data-step="5"><div class="step-num">6</div><span>Ranking</span></div>
+  <div class="progress-step" data-step="6"><div class="step-num">7</div><span>Revenue Impact</span></div>
+  <div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+  <div class="progress-step" data-step="8"><div class="step-num">9</div><span>Recap</span></div>
+</div>
+
+<!-- STAGES VIEWPORT -->
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE ══ -->
+<div class="stage-content active" id="stage0">
+  <div class="stage-header">
+    <div class="stage-badge badge-arch">Stage 1: Architecture</div>
+    <div class="stage-title">Redis Unified Search Intelligence Platform</div>
+    <div class="stage-subtitle">Five tiers. One pipeline. Lexical precision and vector recall fused in a single sub-150ms query against 1.25M SKUs at holiday scale.</div>
+  </div>
+  <div class="arch-wrap">
+    <div class="arch-frame">
+      <div class="arch-tier tier-source">
+        <div class="arch-tier-label">Data Sources</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Product Catalog</h4><p>1.25M SKUs, enriched attributes, variation groups</p></div>
+          <div class="arch-node"><h4>Customer Graph</h4><p>Behavioral history, segments, purchase signals</p></div>
+          <div class="arch-node"><h4>Inventory &amp; Pricing</h4><p>Real-time availability, promo rules, margin flags</p></div>
+          <div class="arch-node"><h4>ML Models</h4><p>SPLADE sparse vectors, product embeddings, ranker</p></div>
+          <div class="arch-node"><h4>Search Logs</h4><p>Click-through, abandonment, conversion telemetry</p></div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-ingest">
+        <div class="arch-tier-label">Ingest (RDI + Featureform)</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, no-rebuild index updates</p></div>
+          <div class="arch-node"><h4>Featureform</h4><p>Feature engineering, train/serve parity, sparse + dense vectors</p></div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-context">
+        <div class="arch-tier-label">Redis Context Tier (Unified Search Index)</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Redis RAM</h4><p>Hot index: live queries, session state, sub-ms lookups</p></div>
+          <div class="arch-node"><h4>Redis Flex</h4><p>Warm tier: full catalog, long-tail SKUs, historical signals</p></div>
+          <div class="arch-node"><h4>Redis Query Engine</h4><p>Hybrid search: lexical + KNN vector in a single command</p></div>
+        </div>
+        <div class="arch-data-strip">
+          <div class="arch-data-chip">Inverted Index</div>
+          <div class="arch-data-chip">Dense Vectors</div>
+          <div class="arch-data-chip">Sparse (SPLADE)</div>
+          <div class="arch-data-chip">Tags / Facets</div>
+          <div class="arch-data-chip">Session State</div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-decide">
+        <div class="arch-tier-label">Decision Engine</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Hybrid Query Planner</h4><p>BM25 lexical pre-filter + vector KNN, single round-trip</p></div>
+          <div class="arch-node"><h4>ML Re-Ranker</h4><p>Revenue weighting, inventory boost, margin optimization</p></div>
+          <div class="arch-node"><h4>Facet / Aggregation</h4><p>Brand, price, category filters in-query, no second pass</p></div>
+          <div class="arch-node"><h4>LangCache</h4><p>Agentic query grounding, LLM acceleration layer</p></div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-act">
+        <div class="arch-tier-label">Output Channels (Act)</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>BestBuy.com Search</h4><p>Ranked SERP, facets, hero placements</p></div>
+          <div class="arch-node"><h4>Mobile App Search</h4><p>In-session personalization, typeahead</p></div>
+          <div class="arch-node"><h4>Agentic Commerce</h4><p>Google UCP, ChatGPT, OpenAI agent browsing</p></div>
+          <div class="arch-node"><h4>Recommendations API</h4><p>PDP cross-sell, cart upsell, email triggers</p></div>
+        </div>
+      </div>
+
+      <div class="arch-feedback">
+        <div class="arch-feedback-icon">&#x21BA;</div>
+        <span><strong style="color:var(--red)">Learn:</strong>&nbsp; Click-through + conversion exhaust &rarr; Kafka &rarr; Databricks retraining &rarr; Updated SPLADE + ranker models &rarr; Redeployed to Redis context tier</span>
+      </div>
+    </div>
+
+    <div class="arch-callouts">
+      <div class="arch-callout"><div class="arch-callout-label">P75 Latency Target</div><div class="arch-callout-value teal">&lt;150 ms</div></div>
+      <div class="arch-callout"><div class="arch-callout-label">SKU Index Scale</div><div class="arch-callout-value orange">1.25M SKUs / 12 GB</div></div>
+      <div class="arch-callout"><div class="arch-callout-label">Holiday Readiness Deadline</div><div class="arch-callout-value amber">Oct 2026 freeze</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 2: SEARCH QUERY / SESSION START ══ -->
+<div class="stage-content" id="stage1">
+  <div class="stage-header">
+    <div class="stage-badge badge-trigger">Stage 2: Search Query</div>
+    <div class="stage-title">Jordan Chen searches "4K TV under $800"</div>
+    <div class="stage-subtitle">A high-intent search query fires on BestBuy.com. Redis identifies a returning customer mid-purchase cycle and activates the unified search pipeline in under 5 milliseconds.</div>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel" style="flex:2">
+      <div class="viz-panel-title">Search Session Event</div>
+      <div class="persona-card">
+        <div class="persona-avatar">JC</div>
+        <div>
+          <div class="persona-name">Jordan Chen</div>
+          <div class="persona-detail">Best Buy member since 2021 | 3 prior TV research sessions | Last purchase: Sony soundbar, $349</div>
+        </div>
+        <div class="persona-badge">HIGH INTENT</div>
+      </div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">Query</span><span class="data-value orange">"4K TV under $800"</span></div>
+        <div class="data-row"><span class="data-label">Query type</span><span class="data-value blue">Navigational + filter intent</span></div>
+        <div class="data-row"><span class="data-label">Session channel</span><span class="data-value">BestBuy.com / Chrome / Desktop</span></div>
+        <div class="data-row"><span class="data-label">Prior search sessions</span><span class="data-value amber">3 TV research sessions last 14 days</span></div>
+        <div class="data-row"><span class="data-label">Last session signal</span><span class="data-value">Dwelled 2m 14s on Sony X90L PDP</span></div>
+        <div class="data-row"><span class="data-label">Cart state</span><span class="data-value teal">Empty (comparison mode)</span></div>
+        <div class="data-row"><span class="data-label">Inventory constraint</span><span class="data-value red">Sony X90L 65" back-ordered, 14 days</span></div>
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">Why This Matters</div>
+      <div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">Jordan has spent <strong style="color:var(--orange)">3 sessions</strong> researching TVs. Purchase intent is high. The Sony he favors is <strong style="color:var(--red)">back-ordered 14 days</strong>.</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">A generic SERP returns Sony X90L at position 1. Jordan sees "back order" and bounces. Best Buy loses a <strong style="color:var(--amber)">$700+ transaction</strong> to a competitor who has stock.</div>
+        <div style="padding:14px;border-radius:8px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--orange)">The opportunity:</strong> Redis knows Jordan's affinity, knows the Sony is out of stock, and can surface an in-stock alternative with identical specs and a strong cross-sell bundle - in the same query latency window Solr requires for lexical alone.</div>
+        <div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> Static Solr SERP. No session context. No inventory signal. No affinity boost. Jordan sees the back-ordered Sony first, loses confidence, and checks Amazon.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+  <div class="stage-header">
+    <div class="stage-badge badge-ingest">Stage 3: Ingest</div>
+    <div class="stage-title">Best Buy's source systems flow into Redis</div>
+    <div class="stage-subtitle">RDI handles real-time CDC from the product catalog, inventory, and customer graph. Featureform orchestrates the ML feature pipeline from Databricks and Kafka. The full 1.25M SKU index updates on write without a rebuild.</div>
+    <span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel" style="flex:2">
+      <div class="viz-panel-title">Source Systems &rarr; Redis</div>
+      <div class="flow-container">
+        <div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#29B5E8">SOLR</div><div><div class="flow-source">Apache Solr &middot; Legacy Lexical Index</div><div class="flow-detail">Existing inverted index, BM25 scoring, facets / aggregations | Migrated via RDI, no data loss</div></div><div class="flow-arrow">&rarr;</div></div>
+        <div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">DBX</div><div><div class="flow-source">Databricks &middot; ML Platform</div><div class="flow-detail">SPLADE sparse vectors, product embeddings (512d), ranker models | Featureform-orchestrated, 4h refresh</div></div><div class="flow-arrow">&rarr;</div></div>
+        <div class="flow-item"><div class="flow-icon" style="background:rgba(255,153,0,.12);color:#FF9900">INV</div><div><div class="flow-source">Inventory System &middot; Real-Time Availability</div><div class="flow-detail">SKU-level stock, back-order flags, store availability | CDC via RDI, sub-second latency</div></div><div class="flow-arrow">&rarr;</div></div>
+        <div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KFK</div><div><div class="flow-source">Kafka &middot; Behavioral Event Stream</div><div class="flow-detail">Search queries, PDP dwells, add-to-cart, abandonment | Live session signals at &lt;80ms ingestion lag</div></div><div class="flow-arrow">&rarr;</div></div>
+        <div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">CDM</div><div><div class="flow-source">Customer Data Model &middot; 360 Profile</div><div class="flow-detail">Purchase history, affinity segments, lifetime value | Batch sync via RDI, event-driven for live updates</div></div><div class="flow-arrow">&rarr;</div></div>
+        <div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">PIM</div><div><div class="flow-source">Product Information Manager &middot; Catalog</div><div class="flow-detail">1.25M SKUs, enriched specs, variation groups (BSYN), pricing | Real-time CDC on attribute changes</div></div><div class="flow-arrow">&rarr;</div></div>
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">RDI Pipeline Status</div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+        <div class="data-row"><span class="data-label">Index rebuild required</span><span class="data-value teal">Never</span></div>
+        <div class="data-row"><span class="data-label">Inventory sync lag</span><span class="data-value teal">&lt;500 ms</span></div>
+        <div class="data-row"><span class="data-label">Databricks feature refresh</span><span class="data-value teal">4h cadence</span></div>
+        <div class="data-row"><span class="data-label">Kafka behavioral lag</span><span class="data-value teal">&lt;80 ms</span></div>
+        <div class="data-row"><span class="data-label">Catalog coverage</span><span class="data-value teal">1.25M SKUs / 12 GB</span></div>
+        <div class="data-row"><span class="data-label">Train / serve parity</span><span class="data-value teal">100%</span></div>
+      </div>
+      <div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:11px;color:var(--text2);line-height:1.5">
+        <strong style="color:var(--red)">Key difference from Solr:</strong> Redis secondary indexes update on write. No scheduled rebuilds. No overnight batch jobs. Inventory changes reflect in search results within 500ms.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+  <div class="stage-header">
+    <div class="stage-badge badge-context">Stage 4: Context Assembly</div>
+    <div class="stage-title">Jordan's purchase profile + live session signals</div>
+    <div class="stage-subtitle">Redis assembles two planes of context simultaneously: Jordan's historical affinity and behavioral graph, and the live in-session signals from this query. Both planes merge in a single sub-millisecond read.</div>
+    <span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel">
+      <div class="viz-panel-title">Customer 360 (Historical)</div>
+      <div style="margin-bottom:14px">
+        <div class="data-label" style="margin-bottom:8px;font-size:12px">Category Affinity Distribution</div>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px">
+          <div style="width:38%;background:var(--blue)"></div>
+          <div style="width:24%;background:var(--purple)"></div>
+          <div style="width:20%;background:var(--amber)"></div>
+          <div style="width:10%;background:var(--teal)"></div>
+          <div style="width:8%;background:var(--text3)"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)">
+          <span>TV/Display 38%</span><span>Audio 24%</span><span>Computing 20%</span><span>Smart Home 10%</span><span>Other 8%</span>
+        </div>
+      </div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">Brand affinity</span><span class="data-value blue">Sony (primary), LG (secondary)</span></div>
+        <div class="data-row"><span class="data-label">Avg TV spend</span><span class="data-value amber">$740 (last 2 purchases)</span></div>
+        <div class="data-row"><span class="data-label">Last purchase</span><span class="data-value">Sony HT-A3000 soundbar, $349</span></div>
+        <div class="data-row"><span class="data-label">Ecosystem signal</span><span class="data-value orange">Sony BRAVIA ecosystem (soundbar owned)</span></div>
+        <div class="data-row"><span class="data-label">Customer LTV segment</span><span class="data-value teal">High Value, Repeat Buyer</span></div>
+        <div class="data-row"><span class="data-label">Total lifetime spend</span><span class="data-value teal">$2,847</span></div>
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">In-Session Signals (Live)</div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">Current query</span><span class="data-value orange">"4K TV under $800"</span></div>
+        <div class="data-row"><span class="data-label">Prior session PDP dwell</span><span class="data-value">Sony X90L 65" &mdash; 2m 14s</span></div>
+        <div class="data-row"><span class="data-label">Filter applied</span><span class="data-value blue">Price: $500-$800 | Size: 65"</span></div>
+        <div class="data-row"><span class="data-label">Inventory signal</span><span class="data-value red">Sony X90L 65": back-ordered</span></div>
+        <div class="data-row"><span class="data-label">Alternative in-stock</span><span class="data-value teal">Sony X85L 65": $749, available</span></div>
+        <div class="data-row"><span class="data-label">Bundle opportunity</span><span class="data-value amber">BRAVIA ecosystem: HT-A5000 upgrade</span></div>
+      </div>
+      <div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:11px;color:var(--text2);line-height:1.5">
+        <strong style="color:var(--blue)">Context fusion:</strong> Jordan owns a Sony soundbar, favors Sony, and is in the $700-$800 spend range. The X90L she researched is out of stock. Redis fuses these three signals and promotes the X85L with a BRAVIA ecosystem bundle - same query, same latency window.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+  <div class="stage-header">
+    <div class="stage-badge badge-features">Stage 5: Feature Serving</div>
+    <div class="stage-title">Features hydrated for the hybrid ranking model</div>
+    <div class="stage-subtitle">Featureform serves every signal needed by the hybrid ranker in a single batch read. Sparse SPLADE vectors, dense product embeddings, inventory flags, and session affinity merge before the first result is scored.</div>
+    <span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span>
+  </div>
+  <div class="viz-area" style="flex-direction:column;gap:18px">
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-name">QUERY_SPARSE_VECTOR</div>
+        <div class="feat-desc">SPLADE sparse representation of "4K TV under $800" - captures semantic weight on price, resolution, size terms</div>
+        <div class="feat-value-row"><span class="feat-value">{tv:0.91, 4k:0.88, budget:0.73...}</span><span class="feat-latency">0.4 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">CUSTOMER_AFFINITY_VECTOR</div>
+        <div class="feat-desc">Jordan's category + brand embedding from 3 years of purchase and browse history, Databricks-trained</div>
+        <div class="feat-value-row"><span class="feat-value">[0.78, 0.21, -0.44, ...]</span><span class="feat-latency">0.5 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">INVENTORY_AVAILABILITY_FLAG</div>
+        <div class="feat-desc">Real-time per-SKU availability from inventory CDC, updated sub-500ms on stock changes</div>
+        <div class="feat-value-row"><span class="feat-value">X90L: 0 | X85L: 847 | X80L: 1,241</span><span class="feat-latency">0.3 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">ECOSYSTEM_BUNDLE_SCORE</div>
+        <div class="feat-desc">Compatibility score between session purchase and Jordan's owned device (Sony HT-A3000), drives bundle surfacing</div>
+        <div class="feat-value-row"><span class="feat-value">0.94 (BRAVIA + HT-A5000)</span><span class="feat-latency">0.6 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">SESSION_PRICE_SENSITIVITY</div>
+        <div class="feat-desc">Inferred from filter behavior and dwell patterns, calibrates result set to stated budget ceiling</div>
+        <div class="feat-value-row"><span class="feat-value">$749 ceiling / high confidence</span><span class="feat-latency">0.2 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">VARIATION_COLLAPSE_GROUP</div>
+        <div class="feat-desc">BSYN-equivalent grouping of Sony X85L size variations, surfaces the 65" first based on Jordan's prior filter</div>
+        <div class="feat-value-row"><span class="feat-value">X85L_55: 0.62 | X85L_65: 0.97</span><span class="feat-latency">0.3 ms</span></div>
+      </div>
+    </div>
+    <div class="viz-panel" style="flex:0">
+      <div class="viz-panel-title">Feature Serving Performance</div>
+      <div style="display:flex;gap:24px;align-items:center">
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Features Hydrated</div><div style="font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono)">186</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">2.1 ms</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Train / Serve Parity</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Sparse + Dense Unified</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">1 query</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 6: RANKING ══ -->
+<div class="stage-content" id="stage5">
+  <div class="stage-header">
+    <div class="stage-badge badge-ranking">Stage 6: Hybrid Ranking</div>
+    <div class="stage-title">Lexical + vector fusion scores the result set</div>
+    <div class="stage-subtitle">Redis Query Engine executes hybrid BM25 + KNN in a single command. Inventory suppression removes back-ordered SKUs. The ML re-ranker applies affinity, bundle, and margin signals to produce the final ranked set.</div>
+    <span class="component-tag">Redis Query Engine</span><span class="component-tag">Hybrid Search</span><span class="component-tag">ML Re-Ranker</span>
+  </div>
+  <div class="viz-area" style="flex-direction:column;gap:20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">14,200 TVs in catalog</div>
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">312 suppressed (back-ordered or OOS)</div>
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:12px;color:var(--blue)">Price filter applied: $500-$800</div>
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 18 ranked for SERP</div>
+    </div>
+    <div class="result-grid">
+      <div class="result-card winner">
+        <div class="result-thumb" style="background:rgba(79,140,255,.1);">&#128250;</div>
+        <div class="result-product">
+          <div class="result-rank">#1 HERO RESULT</div>
+          <div class="result-title">Sony BRAVIA X85L 65" 4K TV</div>
+          <div class="result-meta">$749 &middot; In Stock (847 units) &middot; Ships same day</div>
+          <div class="result-why">Identical resolution to Jordan's researched X90L. In stock. BRAVIA ecosystem compatible with owned HT-A3000 soundbar. Within budget ceiling.</div>
+          <div class="result-score-row">
+            <span class="score-chip chip-lexical">BM25: 0.91</span>
+            <span class="score-chip chip-vector">Vector: 0.93</span>
+            <span class="score-chip chip-hybrid">Hybrid: 0.96</span>
+            <span class="score-chip chip-boost">Inventory boost: +0.08</span>
+          </div>
+        </div>
+      </div>
+      <div class="result-card">
+        <div class="result-thumb" style="background:rgba(167,139,250,.1);">&#128250;</div>
+        <div class="result-product">
+          <div class="result-rank">#2 RECOMMENDED</div>
+          <div class="result-title">LG C3 OLED 65" 4K TV</div>
+          <div class="result-meta">$796 &middot; In Stock (412 units)</div>
+          <div class="result-why">LG is Jordan's secondary brand affinity. OLED panel quality matches premium buyer profile. At price ceiling but high conversion rate in this segment.</div>
+          <div class="result-score-row">
+            <span class="score-chip chip-lexical">BM25: 0.88</span>
+            <span class="score-chip chip-vector">Vector: 0.86</span>
+            <span class="score-chip chip-hybrid">Hybrid: 0.87</span>
+          </div>
+        </div>
+      </div>
+      <div class="result-card">
+        <div class="result-thumb" style="background:rgba(255,188,87,.1);">&#127981;</div>
+        <div class="result-product">
+          <div class="result-rank">#3 BUNDLE UPSELL</div>
+          <div class="result-title">Sony X85L 65" + HT-A5000 Soundbar Bundle</div>
+          <div class="result-meta">$1,148 bundled &middot; Save $150 &middot; BRAVIA ecosystem</div>
+          <div class="result-why">Jordan owns the HT-A3000. The A5000 is the natural upgrade. Bundle surfaces in position 3 as a revenue-expansion play, not interrupting the primary search.</div>
+          <div class="result-score-row">
+            <span class="score-chip chip-vector">Ecosystem: 0.94</span>
+            <span class="score-chip chip-boost">Bundle margin: +$180</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 7: REVENUE IMPACT ══ -->
+<div class="stage-content" id="stage6">
+  <div class="stage-header">
+    <div class="stage-badge badge-revenue">Stage 7: Revenue Impact</div>
+    <div class="stage-title">Latency recovered. Conversion saved. Bundle created.</div>
+    <div class="stage-subtitle">Search 2 ran at 1,500ms P75 and failed A/B tests against Search 1. Redis restores sub-150ms P75 while adding vector recall, inventory intelligence, and bundle surfacing - all in the same latency budget.</div>
+  </div>
+  <div class="viz-area" style="flex-direction:column;gap:20px">
+    <div class="latency-callout">
+      <div class="lat-block bad"><div class="lat-num">1,500ms</div><div class="lat-lbl">Search 2 P75 (failed)</div></div>
+      <div class="lat-block bad"><div class="lat-num">2,500ms</div><div class="lat-lbl">Search 2 P99</div></div>
+      <div style="display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--teal);font-weight:700;">&rarr;</div>
+      <div class="lat-block good"><div class="lat-num">&lt;150ms</div><div class="lat-lbl">Redis P75 target</div></div>
+      <div class="lat-block good"><div class="lat-num">&lt;300ms</div><div class="lat-lbl">Redis P99 projection</div></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+      <div class="viz-panel" style="padding:18px">
+        <div class="viz-panel-title">Saved Conversion</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Jordan sees the in-stock X85L at position 1. The back-ordered X90L is suppressed. Purchase completes.</div>
+        <div style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--teal);margin-bottom:4px;">$749</div>
+        <div style="font-size:11px;color:var(--text3)">Transaction saved from bounce</div>
+        <div style="margin-top:10px;padding:10px;border-radius:7px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:11px;color:var(--text2)">Without Redis: Jordan sees back-ordered Sony at position 1, loses confidence, exits to Amazon. Revenue loss: $749.</div>
+      </div>
+      <div class="viz-panel" style="padding:18px">
+        <div class="viz-panel-title">Bundle Expansion</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Ecosystem compatibility score surfaces the HT-A5000 bundle in position 3. Jordan upgrades her soundbar.</div>
+        <div style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--amber);margin-bottom:4px;">+$399</div>
+        <div style="font-size:11px;color:var(--text3)">Incremental soundbar revenue</div>
+        <div style="margin-top:10px;padding:10px;border-radius:7px;background:rgba(255,188,87,.06);border:1px solid rgba(255,188,87,.12);font-size:11px;color:var(--text2)">Generic SERP has no ecosystem context. Bundle never surfaces. $399 left on the table.</div>
+      </div>
+      <div class="viz-panel" style="padding:18px">
+        <div class="viz-panel-title">Holiday Scale Impact</div>
+        <div style="font-size:11px;color:var(--text2);line-height:1.6;margin-bottom:12px">Best Buy's digital business is $2.86B annually. Search drives roughly 35% of digital conversions.</div>
+        <div style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--orange);margin-bottom:4px;">35%</div>
+        <div style="font-size:11px;color:var(--text3)">Of digital revenue search-attributed</div>
+        <div style="margin-top:10px;padding:10px;border-radius:7px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.12);font-size:11px;color:var(--text2)">Every 1% conversion improvement on peak holiday traffic = $10M+ annual digital revenue impact at Best Buy scale.</div>
+      </div>
+    </div>
+
+    <div class="viz-panel" style="padding:18px">
+      <div class="viz-panel-title">Agentic Commerce: The Next Horizon</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7">CEO Corie Barry committed publicly that Best Buy is <strong style="color:var(--blue)">evolving BestBuy.com to be agentic-friendly</strong>, partnering with Google (UCP/Gemini) and OpenAI/ChatGPT. When an AI agent browses on a customer's behalf, it sends a natural language query - not a keyword. <strong style="color:var(--teal)">Redis LangCache</strong> sits in front of the vector index and grounds every agentic query in real-time inventory, pricing, and customer context before the LLM responds. The same Redis tier that solves the Unified Search problem is the foundation for every agentic commerce interaction Best Buy has publicly committed to building.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+  <div class="stage-header">
+    <div class="stage-badge badge-outcome">Stage 8: Outcome</div>
+    <div class="stage-title">Same query. Two very different search experiences.</div>
+    <div class="stage-subtitle">Left: Solr-based static SERP. Right: Redis-powered hybrid search with inventory intelligence, affinity ranking, and ecosystem bundle surfacing.</div>
+  </div>
+  <div class="outcome-split">
+    <div class="outcome-col">
+      <div class="outcome-header generic">BEFORE: Solr Static SERP</div>
+      <div class="bb-screen">
+        <div class="bb-header">
+          <div class="bb-logo-mark">bestbuy</div>
+          <div class="bb-search-bar">4K TV under $800</div>
+        </div>
+        <div class="bb-results-area">
+          <div style="font-size:10px;color:#666;font-family:monospace;margin-bottom:8px;">Results: 847 items &middot; P75: 1,500ms</div>
+          <div class="bb-result-row">
+            <div class="bb-result-img">&#128250;</div>
+            <div style="flex:1">
+              <div class="bb-result-name">Sony BRAVIA X90L 65" 4K TV</div>
+              <div class="bb-result-price" style="color:#DC382C">$849 &middot; &#9888; Back-ordered (14 days)</div>
+            </div>
+            <div class="bb-result-badge badge-generic">BM25 MATCH</div>
+          </div>
+          <div class="bb-result-row">
+            <div class="bb-result-img">&#128250;</div>
+            <div style="flex:1">
+              <div class="bb-result-name">Samsung QN90D 65" Neo QLED</div>
+              <div class="bb-result-price">$799</div>
+            </div>
+            <div class="bb-result-badge badge-generic">POPULAR</div>
+          </div>
+          <div class="bb-result-row">
+            <div class="bb-result-img">&#128250;</div>
+            <div style="flex:1">
+              <div class="bb-result-name">Hisense U8 Series 65" ULED</div>
+              <div class="bb-result-price">$649</div>
+            </div>
+            <div class="bb-result-badge badge-generic">BEST VALUE</div>
+          </div>
+          <div style="padding:10px 12px;margin-top:6px;border-radius:6px;background:rgba(220,56,44,.08);border:1px solid rgba(220,56,44,.2);font-size:10px;color:#DC382C;text-align:center;">Jordan sees back-ordered Sony first. Loses confidence. Exits.</div>
+        </div>
+        <div class="bb-latency-bar">
+          <span>P75 Latency</span><span class="lat-before">1,500 ms</span>
+        </div>
+      </div>
+      <div class="outcome-metrics generic-m">
+        <div class="outcome-metric"><div class="outcome-metric-value">1.5s</div><div class="outcome-metric-label">P75 Latency</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">41%</div><div class="outcome-metric-label">Bounce Rate</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">$749</div><div class="outcome-metric-label">Revenue Lost</div></div>
+      </div>
+    </div>
+    <div class="outcome-col">
+      <div class="outcome-header personalized">AFTER: Redis Hybrid Search</div>
+      <div class="bb-screen">
+        <div class="bb-header">
+          <div class="bb-logo-mark">bestbuy</div>
+          <div class="bb-search-bar">4K TV under $800</div>
+        </div>
+        <div class="bb-results-area">
+          <div style="font-size:10px;color:#00C9A7;font-family:monospace;margin-bottom:8px;">Results: 1,847 relevant &middot; P75: 142ms &middot; Hybrid + Inventory</div>
+          <div class="bb-result-row top-pick">
+            <div class="bb-result-img" style="background:rgba(0,201,167,.15);">&#128250;</div>
+            <div style="flex:1">
+              <div class="bb-result-name">Sony BRAVIA X85L 65" 4K TV</div>
+              <div class="bb-result-price">$749 &middot; &#10003; In Stock (Same-day shipping)</div>
+            </div>
+            <div class="bb-result-badge badge-match">BEST MATCH</div>
+          </div>
+          <div class="bb-result-row">
+            <div class="bb-result-img">&#128250;</div>
+            <div style="flex:1">
+              <div class="bb-result-name">LG C3 OLED 65" 4K TV</div>
+              <div class="bb-result-price">$796 &middot; In Stock</div>
+            </div>
+            <div class="bb-result-badge badge-match">AFFINITY</div>
+          </div>
+          <div class="bb-result-row" style="border-color:rgba(255,188,87,.25);background:rgba(255,188,87,.04)">
+            <div class="bb-result-img" style="background:rgba(255,188,87,.1);">&#127981;</div>
+            <div style="flex:1">
+              <div class="bb-result-name">Sony X85L 65" + HT-A5000 Bundle</div>
+              <div class="bb-result-price" style="color:#FFBC57">$1,148 bundled &middot; Save $150</div>
+            </div>
+            <div class="bb-result-badge" style="background:rgba(255,188,87,.15);color:#FFBC57;">BUNDLE</div>
+          </div>
+          <div style="padding:10px 12px;margin-top:6px;border-radius:6px;background:rgba(0,201,167,.07);border:1px solid rgba(0,201,167,.2);font-size:10px;color:#00C9A7;text-align:center;">In-stock Sony surfaces first. Ecosystem bundle at position 3. Jordan converts.</div>
+        </div>
+        <div class="bb-latency-bar">
+          <span>P75 Latency</span><span class="lat-after">142 ms</span>
+        </div>
+      </div>
+      <div class="outcome-metrics personalized-m">
+        <div class="outcome-metric"><div class="outcome-metric-value">142ms</div><div class="outcome-metric-label">P75 Latency</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">14%</div><div class="outcome-metric-label">Bounce Rate</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">$1,148</div><div class="outcome-metric-label">Session Revenue</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+  <div class="stage-header">
+    <div class="stage-badge badge-arch">Stage 9: Architecture Recap</div>
+    <div class="stage-title">Same architecture. Now with numbers.</div>
+    <div class="stage-subtitle">Every result you just saw ran through this pipeline. Sub-150ms P75. 1.25M SKUs. Hybrid lexical and vector in a single command. Holiday-ready by October 2026.</div>
+  </div>
+  <div class="arch-wrap">
+    <div class="arch-frame">
+      <div class="arch-tier tier-source">
+        <div class="arch-tier-label">Data Sources</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Product Catalog</h4><p>1.25M SKUs, enriched attributes, variation groups</p></div>
+          <div class="arch-node"><h4>Customer Graph</h4><p>Behavioral history, segments, purchase signals</p></div>
+          <div class="arch-node"><h4>Inventory &amp; Pricing</h4><p>Real-time availability, promo rules, margin flags</p></div>
+          <div class="arch-node"><h4>ML Models</h4><p>SPLADE sparse vectors, product embeddings, ranker</p></div>
+          <div class="arch-node"><h4>Search Logs</h4><p>Click-through, abandonment, conversion telemetry</p></div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-ingest">
+        <div class="arch-tier-label">Ingest (RDI + Featureform)</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, no-rebuild index updates</p></div>
+          <div class="arch-node"><h4>Featureform</h4><p>Feature engineering, train/serve parity, sparse + dense vectors</p></div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-context">
+        <div class="arch-tier-label">Redis Context Tier (Unified Search Index)</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Redis RAM</h4><p>Hot index: live queries, session state, sub-ms lookups</p></div>
+          <div class="arch-node"><h4>Redis Flex</h4><p>Warm tier: full catalog, long-tail SKUs, historical signals</p></div>
+          <div class="arch-node"><h4>Redis Query Engine</h4><p>Hybrid search: lexical + KNN vector in a single command</p></div>
+        </div>
+        <div class="arch-data-strip">
+          <div class="arch-data-chip">Inverted Index</div>
+          <div class="arch-data-chip">Dense Vectors</div>
+          <div class="arch-data-chip">Sparse (SPLADE)</div>
+          <div class="arch-data-chip">Tags / Facets</div>
+          <div class="arch-data-chip">Session State</div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-decide">
+        <div class="arch-tier-label">Decision Engine</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>Hybrid Query Planner</h4><p>BM25 lexical pre-filter + vector KNN, single round-trip</p></div>
+          <div class="arch-node"><h4>ML Re-Ranker</h4><p>Revenue weighting, inventory boost, margin optimization</p></div>
+          <div class="arch-node"><h4>Facet / Aggregation</h4><p>Brand, price, category filters in-query, no second pass</p></div>
+          <div class="arch-node"><h4>LangCache</h4><p>Agentic query grounding, LLM acceleration layer</p></div>
+        </div>
+      </div>
+
+      <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div class="arch-tier tier-act">
+        <div class="arch-tier-label">Output Channels (Act)</div>
+        <div class="arch-tier-row">
+          <div class="arch-node"><h4>BestBuy.com Search</h4><p>Ranked SERP, facets, hero placements</p></div>
+          <div class="arch-node"><h4>Mobile App Search</h4><p>In-session personalization, typeahead</p></div>
+          <div class="arch-node"><h4>Agentic Commerce</h4><p>Google UCP, ChatGPT, OpenAI agent browsing</p></div>
+          <div class="arch-node"><h4>Recommendations API</h4><p>PDP cross-sell, cart upsell, email triggers</p></div>
+        </div>
+      </div>
+
+      <div class="arch-feedback">
+        <div class="arch-feedback-icon">&#x21BA;</div>
+        <span><strong style="color:var(--red)">Learn:</strong>&nbsp; Click-through + conversion exhaust &rarr; Kafka &rarr; Databricks retraining &rarr; Updated SPLADE + ranker models &rarr; Redeployed to Redis context tier</span>
+      </div>
+    </div>
+
+    <div class="arch-callouts">
+      <div class="arch-callout"><div class="arch-callout-label">P75 Latency (Proven)</div><div class="arch-callout-value teal">&lt;150 ms</div></div>
+      <div class="arch-callout"><div class="arch-callout-label">Search Conversion Lift</div><div class="arch-callout-value orange">41% bounce &rarr; 14% bounce</div></div>
+      <div class="arch-callout"><div class="arch-callout-label">Revenue Per Search Session</div><div class="arch-callout-value amber">$0 &rarr; $1,148 (w/ bundle)</div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /stage-viewport -->
+
+<div class="nav-bar">
+  <div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div>
+  <div class="nav-buttons">
+    <button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button>
+    <button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button>
+  </div>
+</div>
+
+<script>
+let current=0;const total=9;
+const latencies=['--','<5ms','1.2ms','3.1ms','5.4ms','7.8ms','9.2ms','9.8ms','9.8ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
