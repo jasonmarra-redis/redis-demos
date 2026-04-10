@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Ad Decisioning Demo | Vizio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --vizio-bg:#0A0A0A;--vizio-card:#1A1A1A;--vizio-border:rgba(255,255,255,.08);
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;--walmart:#0071DC;--green:#22C55E;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:120px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-segment{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-auction{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-revenue{background:rgba(0,113,220,.1);color:var(--walmart);border:1px solid rgba(0,113,220,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:780px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.component-tag.blue{background:rgba(79,140,255,.1);color:var(--blue);border-color:rgba(79,140,255,.15)}
+.component-tag.walmart{background:rgba(0,113,220,.1);color:var(--walmart);border-color:rgba(0,113,220,.2)}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}.data-row:nth-child(8){animation-delay:.66s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}.data-value.walmart{color:var(--walmart)}.data-value.green{color:var(--green)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.viewer-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.viewer-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--orange),var(--amber));display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.viewer-name{font-size:17px;font-weight:700}.viewer-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.viewer-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(0,113,220,.12);color:var(--walmart);border:1px solid rgba(0,113,220,.2)}
+/* Bid cards for auction stage */
+.bid-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.bid-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.bid-card:nth-child(1){animation-delay:.15s}.bid-card:nth-child(2){animation-delay:.3s}.bid-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.bid-card.winner{border-color:var(--amber);background:rgba(255,188,87,.05);box-shadow:0 0 24px rgba(255,188,87,.08)}
+.bid-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.bid-card.winner .bid-rank{color:var(--amber)}
+.bid-dsp{font-size:15px;font-weight:700;margin-bottom:2px}
+.bid-advertiser{font-size:12px;color:var(--text3);margin-bottom:10px}
+.bid-cpm{font-family:var(--mono);font-size:28px;font-weight:700;margin-bottom:4px}
+.bid-card.winner .bid-cpm{color:var(--amber)}
+.bid-targeting{font-size:11px;color:var(--text3);margin-bottom:12px;line-height:1.5}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+/* Segment chips */
+.segment-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.seg-chip{padding:4px 10px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono)}
+.seg-auto{background:rgba(255,188,87,.12);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.seg-walmart{background:rgba(0,113,220,.12);color:var(--walmart);border:1px solid rgba(0,113,220,.2)}
+.seg-content{background:rgba(220,56,44,.12);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.seg-tech{background:rgba(79,140,255,.12);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.seg-freq{background:rgba(0,201,167,.12);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+/* Feature/lookup cards */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Revenue stage */
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.2)}
+.rev-value{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--amber);animation:pulseArrow 1.5s infinite}
+/* Attribution flow */
+.attr-flow{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.attr-step{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:slideIn .5s forwards}
+.attr-step:nth-child(1){animation-delay:.1s}.attr-step:nth-child(2){animation-delay:.25s}.attr-step:nth-child(3){animation-delay:.4s}.attr-step:nth-child(4){animation-delay:.55s}
+.attr-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.attr-text{font-size:13px;font-weight:600}.attr-sub{font-size:11px;color:var(--text3);margin-top:1px}
+.attr-check{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700}
+/* Outcome screens */
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(255,188,87,.08);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--amber)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+/* Ad mock screen */
+.ad-screen{background:var(--vizio-bg);border-radius:16px;border:2px solid #333;overflow:hidden;position:relative}
+.ad-screen.winner-screen{border-color:rgba(255,188,87,.4)}
+.ad-video{height:180px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.ad-overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:18px 22px;background:linear-gradient(to top,rgba(0,0,0,.8) 0%,transparent 50%)}
+.ad-badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:9px;font-weight:700;font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px}
+.ad-title{font-size:18px;font-weight:800;margin-bottom:4px;line-height:1.2}
+.ad-sub{font-size:11px;color:var(--text2)}
+.ad-meta{padding:12px 18px;background:rgba(255,255,255,.03);display:flex;gap:16px;align-items:center}
+.ad-meta-item{text-align:center}
+.ad-meta-value{font-family:var(--mono);font-size:13px;font-weight:700}
+.ad-meta-label{font-size:10px;color:var(--text3);margin-top:2px}
+/* Architecture tiers */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px;text-align:center;border:1px solid;min-height:60px;display:flex;flex-direction:column;justify-content:center;min-width:100px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}.arch-callout-value.orange{color:var(--orange)}.arch-callout-value.amber{color:var(--amber)}.arch-callout-value.walmart{color:var(--walmart)}
+/* Nav */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+/* ACR stat bar */
+.acr-stat-bar{display:flex;gap:12px;margin-bottom:20px}
+.acr-stat{flex:1;padding:14px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);text-align:center}
+.acr-stat-value{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--teal);line-height:1;margin-bottom:4px}
+.acr-stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px}
+/* Break countdown */
+.break-alert{padding:16px 20px;border-radius:10px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.2);display:flex;align-items:center;gap:14px;margin-bottom:18px;animation:fadeUp .6s forwards}
+.break-alert-icon{width:36px;height:36px;border-radius:8px;background:rgba(249,115,22,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;animation:blink 1.5s infinite}
+.break-alert-text{font-size:13px;font-weight:600;color:var(--orange)}
+.break-alert-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.break-window{margin-left:auto;font-family:var(--mono);font-size:22px;font-weight:700;color:var(--orange)}
+@media(max-width:900px){
+  .topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}
+  .stage-title{font-size:26px}.viz-area{flex-direction:column}
+  .outcome-split{grid-template-columns:1fr}.bid-grid{grid-template-columns:1fr}
+  .feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}
+  .progress-step span{display:none}.acr-stat-bar{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="redis-logo">Redis</div>
+    <div class="topbar-divider"></div>
+    <div class="topbar-title">Real-Time Ad Decisioning Demo | Vizio</div>
+  </div>
+  <div class="topbar-right">
+    <div class="latency-display">
+      <div class="latency-dot"></div>
+      <span class="latency-label">Redis Path</span>
+      <span class="latency-value" id="globalLatency">--</span>
+    </div>
+    <div class="stage-counter" id="stageCounter">1 / 9</div>
+  </div>
+</div>
+
+<div class="progress-track" id="progressTrack">
+  <div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+  <div class="progress-step" data-step="1"><div class="step-num">2</div><span>Ad Break Trigger</span></div>
+  <div class="progress-step" data-step="2"><div class="step-num">3</div><span>ACR &amp; Ingest</span></div>
+  <div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+  <div class="progress-step" data-step="4"><div class="step-num">5</div><span>Segment Lookup</span></div>
+  <div class="progress-step" data-step="5"><div class="step-num">6</div><span>OpenRTB Auction</span></div>
+  <div class="progress-step" data-step="6"><div class="step-num">7</div><span>Commerce &amp; Revenue</span></div>
+  <div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+  <div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
+<div class="stage-content active" id="stage0">
+  <div class="stage-header">
+    <div class="stage-badge badge-arch">Stage 1: The Architecture</div>
+    <div class="stage-title">Vizio's Real-Time Ad Decisioning Stack</div>
+    <div class="stage-subtitle">Inscape ACR data from 24M opted-in TVs feeds a five-tier pipeline. Redis sits at the critical path — sub-10ms segment lookups, frequency cap enforcement, and viewing context assembly — before the OpenRTB auction fires. Walmart first-party purchase data is the new decisioning edge post-acquisition.</div>
+  </div>
+  <div class="arch-wrap">
+  <div class="arch-frame">
+
+    <div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Kinesis</h4><p>Live ACR telemetry, second-by-second</p></div>
+      <div class="arch-node"><h4>S3 / Delta Lake</h4><p>ACR archive, viewing history, segment training data</p></div>
+      <div class="arch-node"><h4>Databricks</h4><p>500+ audience segment computation, ML training</p></div>
+      <div class="arch-node"><h4>Walmart Connect</h4><p>150M shopper signals, closed-loop attribution</p></div>
+      <div class="arch-node"><h4>3rd Party Data</h4><p>LiveRamp, IRI/Circana, Acxiom, Experian</p></div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest &amp; Processing</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Inscape ACR Engine</h4><p>Glass-level fingerprinting, input-agnostic, 24M opted-in TVs</p></div>
+      <div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync to Redis hot path</p></div>
+      <div class="arch-node"><h4>Spark Structured Streaming</h4><p>Kinesis → Delta Lake + low-latency Redis writes</p></div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-context"><div class="arch-tier-label">Redis Hot Path (Ad Decisioning Context)</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Redis RAM</h4><p>Frequency caps (INCR), segment membership, live viewing context</p></div>
+      <div class="arch-node"><h4>Redis Flex</h4><p>Full audience history, creative performance embeddings</p></div>
+      <div class="arch-node"><h4>Featureform</h4><p>ML feature store, ad scoring features</p></div>
+    </div>
+    <div class="arch-data-strip">
+      <div class="arch-data-chip">Freq Caps</div>
+      <div class="arch-data-chip">Segments</div>
+      <div class="arch-data-chip">Identity Map</div>
+      <div class="arch-data-chip">Deal Floors</div>
+      <div class="arch-data-chip">Viewing Context</div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Rules / Policy</h4><p>Freq caps, competitive suppression, brand safety, floor prices</p></div>
+      <div class="arch-node"><h4>ML Ranker</h4><p>Audience-creative relevance scoring, CPM optimization</p></div>
+      <div class="arch-node"><h4>Vector Search</h4><p>Creative-audience semantic matching</p></div>
+      <div class="arch-node"><h4>OpenRTB Auction</h4><p>Magnite/SpringServe SSP → DSPs (100–250ms)</p></div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-act"><div class="arch-tier-label">Ad Delivery Surfaces</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>WatchFree+ SSAI</h4><p>Pre-roll &amp; mid-roll video, server-side stitched</p></div>
+      <div class="arch-node"><h4>SmartCast Home</h4><p>SpringServe tiles, pause ads, native banners</p></div>
+      <div class="arch-node"><h4>Linear Addressable</h4><p>Project OAR watermark swap (FreeWheel / GAM)</p></div>
+      <div class="arch-node"><h4>Cross-Screen</h4><p>Household IP retargeting, Walmart omnichannel</p></div>
+    </div></div>
+
+    <div class="arch-feedback">
+      <div class="arch-feedback-icon">&#x21BA;</div>
+      <span><strong style="color:var(--red)">Learn:</strong>&nbsp; Ad impression events &rarr; Kinesis &rarr; Databricks segment refresh &rarr; Updated models &rarr; Redeployed to Redis hot path &nbsp;|&nbsp; <strong style="color:var(--walmart)">Commerce loop:</strong>&nbsp; TV ad exposure &rarr; Walmart purchase &rarr; Closed-loop attribution confirmed</span>
+    </div>
+
+  </div>
+  <div class="arch-callouts">
+    <div class="arch-callout"><div class="arch-callout-label">Redis Hot Path Latency</div><div class="arch-callout-value teal">&lt;10 ms</div></div>
+    <div class="arch-callout"><div class="arch-callout-label">Opted-In Vizio TVs</div><div class="arch-callout-value orange">24M Inscape ACR</div></div>
+    <div class="arch-callout"><div class="arch-callout-label">Walmart Shopper Signals</div><div class="arch-callout-value walmart">150M weekly</div></div>
+  </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 2: AD BREAK TRIGGER ══ -->
+<div class="stage-content" id="stage1">
+  <div class="stage-header">
+    <div class="stage-badge badge-trigger">Stage 2: Ad Break Trigger</div>
+    <div class="stage-title">Marcus is watching WatchFree+. A mid-roll break is 3 seconds away.</div>
+    <div class="stage-subtitle">Inscape ACR has detected exactly what Marcus is watching. A break cue fires and the entire ad decisioning pipeline — segment lookup, frequency check, bid enrichment — must complete before the break starts. The window is ~200–500ms. Redis owns the first 10ms.</div>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel" style="flex:2">
+      <div class="viz-panel-title">Active Viewing Session</div>
+      <div class="viewer-card">
+        <div class="viewer-avatar">MC</div>
+        <div>
+          <div class="viewer-name">Marcus Cole</div>
+          <div class="viewer-detail">Vizio M-Series 65" · Rochester Hills, MI · Unified Walmart Login: Active</div>
+        </div>
+        <div class="viewer-badge">WALMART LINKED</div>
+      </div>
+      <div class="break-alert">
+        <div class="break-alert-icon">&#x23F0;</div>
+        <div>
+          <div class="break-alert-text">Mid-Roll Break #2 — 30s Slot</div>
+          <div class="break-alert-sub">SSAI cue point detected · WatchFree+ stream · decisioning pipeline activated</div>
+        </div>
+        <div class="break-window">~300ms</div>
+      </div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">Currently watching</span><span class="data-value orange">The Night Agent S2, Ep 4 (WatchFree+)</span></div>
+        <div class="data-row"><span class="data-label">Content genre</span><span class="data-value">Thriller / Action</span></div>
+        <div class="data-row"><span class="data-label">Time into episode</span><span class="data-value">22 min (mid-roll eligible)</span></div>
+        <div class="data-row"><span class="data-label">WatchFree+ session today</span><span class="data-value teal">38 min (strong engagement)</span></div>
+        <div class="data-row"><span class="data-label">DMA market</span><span class="data-value">Detroit-Ann Arbor, MI (#11)</span></div>
+        <div class="data-row"><span class="data-label">Daypart</span><span class="data-value amber">Prime (8:54 PM)</span></div>
+        <div class="data-row"><span class="data-label">ACR input source</span><span class="data-value">WatchFree+ native (SmartCast OS)</span></div>
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">Why This Moment Matters</div>
+      <div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">WatchFree+ is Vizio's <strong style="color:var(--orange)">#1 monetization surface</strong>. Every mid-roll break is a revenue event — but only if the right ad reaches the right household.</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">Generic contextual targeting yields <strong style="color:var(--text3)">$8–10 CPM</strong>. Marcus's Walmart-linked profile, combined with his ACR-validated auto affinity, commands <strong style="color:var(--amber)">$18–25 CPM</strong> from auto advertisers.</div>
+        <div style="padding:14px;border-radius:8px;background:rgba(0,113,220,.06);border:1px solid rgba(0,113,220,.12);font-size:12px;color:var(--text2);line-height:1.6">
+          <strong style="color:var(--walmart)">Post-Walmart acquisition:</strong> Marcus has linked his Walmart account to his Vizio TV. This unlocks first-party purchase data — Walmart can see he recently purchased auto supplies and has high auto category propensity. This signal commands a premium in the auction.
+        </div>
+        <div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6">
+          <strong style="color:var(--text3)">Without Redis:</strong> Audience segment lookup requires a Databricks query — too slow for a 300ms ad break. Frequency cap check hits a relational DB — latency spike. The auction fires with stale or missing context. Result: floor-priced generic ad, $8 CPM.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 3: ACR & INGEST ══ -->
+<div class="stage-content" id="stage2">
+  <div class="stage-header">
+    <div class="stage-badge badge-ingest">Stage 3: ACR &amp; Ingest</div>
+    <div class="stage-title">Inscape ACR streams real-time viewing data into Redis</div>
+    <div class="stage-subtitle">Vizio's Inscape engine performs glass-level content fingerprinting across 24M opted-in TVs — input-agnostic, second-by-second. RDI and Spark Structured Streaming bridge ACR events, Databricks audience segments, and Walmart purchase signals into Redis's hot path.</div>
+    <span class="component-tag">Inscape ACR</span>
+    <span class="component-tag">Redis Data Integration (RDI)</span>
+    <span class="component-tag blue">Spark Structured Streaming</span>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel" style="flex:2">
+      <div class="viz-panel-title">Source Systems &rarr; Redis Hot Path</div>
+      <div class="acr-stat-bar">
+        <div class="acr-stat"><div class="acr-stat-value">24M</div><div class="acr-stat-label">Opted-In TVs</div></div>
+        <div class="acr-stat"><div class="acr-stat-value">~1s</div><div class="acr-stat-label">ACR Granularity</div></div>
+        <div class="acr-stat"><div class="acr-stat-value">500+</div><div class="acr-stat-label">Audience Segments</div></div>
+        <div class="acr-stat"><div class="acr-stat-value">150M</div><div class="acr-stat-label">Walmart Shoppers</div></div>
+      </div>
+      <div class="flow-container">
+        <div class="flow-item">
+          <div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KNS</div>
+          <div>
+            <div class="flow-source">Kinesis &middot; Live ACR Telemetry</div>
+            <div class="flow-detail">Second-by-second fingerprint events from 24M TVs | Commercial break detection | Ad exposure logging | Input-agnostic (cable, HDMI, streaming, native)</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">DBX</div>
+          <div>
+            <div class="flow-source">Databricks &middot; Audience Segment Engine</div>
+            <div class="flow-detail">Computes 500+ segments from ACR + Walmart data | Genre affinity, ad exposure frequency, purchase propensity models | Pushes to Redis on 4h refresh cycle</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-icon" style="background:rgba(167,139,250,.12);color:#A78BFA">S3</div>
+          <div>
+            <div class="flow-source">S3 / Delta Lake &middot; ACR Archive &amp; Training Data</div>
+            <div class="flow-detail">Full ACR event history across all opted-in devices | Historical ad exposure logs for measurement | Inscape data licensed to Nielsen, VideoAmp, iSpot, EDO</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-icon" style="background:rgba(0,113,220,.15);color:var(--walmart)">WMT</div>
+          <div>
+            <div class="flow-source">Walmart Connect &middot; First-Party Purchase Data</div>
+            <div class="flow-detail">150M weekly shopper signals | Category affinity &amp; basket data | Linked via unified Walmart/Vizio login | Closed-loop attribution backbone</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+        </div>
+        <div class="flow-item">
+          <div class="flow-icon" style="background:rgba(79,140,255,.12);color:var(--blue)">3PD</div>
+          <div>
+            <div class="flow-source">3rd Party Enrichment &middot; LiveRamp / IRI / Acxiom</div>
+            <div class="flow-detail">Identity resolution via LiveRamp RampID | CPG purchase data (IRI/Circana) | Demographic overlays (Acxiom, Experian) | Oracle Data Cloud segments</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+        </div>
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">Redis Pipeline Status</div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">ACR stream lag</span><span class="data-value teal">&lt;2s (Kinesis)</span></div>
+        <div class="data-row"><span class="data-label">Segment refresh cycle</span><span class="data-value teal">4h (Databricks)</span></div>
+        <div class="data-row"><span class="data-label">Walmart signal sync</span><span class="data-value walmart">Real-time (login-linked)</span></div>
+        <div class="data-row"><span class="data-label">Freq cap TTL</span><span class="data-value teal">Rolling 24h / 7d</span></div>
+        <div class="data-row"><span class="data-label">Redis write throughput</span><span class="data-value teal">1.2M ops/sec</span></div>
+        <div class="data-row"><span class="data-label">Cache hit rate</span><span class="data-value teal">99.4%</span></div>
+        <div class="data-row"><span class="data-label">Identity resolution</span><span class="data-value teal">LiveRamp RampID</span></div>
+      </div>
+      <div style="margin-top:16px;padding:13px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.1);font-size:11px;color:var(--text2);line-height:1.5">
+        <strong style="color:var(--red)">Inscape ACR advantage:</strong> Glass-level detection means Vizio sees ad exposure even when Marcus is watching cable TV via HDMI, enabling true cross-platform frequency capping — no other smart TV OEM has this.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+  <div class="stage-header">
+    <div class="stage-badge badge-context">Stage 4: Context Assembly</div>
+    <div class="stage-title">Marcus's ad decisioning profile assembled in Redis</div>
+    <div class="stage-subtitle">Redis assembles the full ad context: what Marcus is watching right now (ACR), which audience segments he belongs to (Databricks), his Walmart purchase signals, and his current frequency cap state — all in under 3ms before the OpenRTB bid request is built.</div>
+    <span class="component-tag">Redis RAM</span>
+    <span class="component-tag">Redis Flex</span>
+    <span class="component-tag wallet">Inscape ACR</span>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel">
+      <div class="viz-panel-title">Viewing &amp; Ad Context (Live)</div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">ACR: content detected</span><span class="data-value orange">The Night Agent S2 (WatchFree+)</span></div>
+        <div class="data-row"><span class="data-label">Content genre</span><span class="data-value">Thriller / Action</span></div>
+        <div class="data-row"><span class="data-label">Break slot</span><span class="data-value">30s mid-roll, Break #2</span></div>
+        <div class="data-row"><span class="data-label">Daypart</span><span class="data-value amber">Prime (8:54 PM, Sunday)</span></div>
+        <div class="data-row"><span class="data-label">DMA</span><span class="data-value">Detroit-Ann Arbor (#11)</span></div>
+      </div>
+      <div style="margin-top:16px">
+        <div class="data-label" style="font-size:12px;margin-bottom:10px">Active Audience Segments (from Redis)</div>
+        <div class="segment-chips">
+          <div class="seg-chip seg-auto">auto_intender</div>
+          <div class="seg-chip seg-walmart">walmart_auto_buyer</div>
+          <div class="seg-chip seg-content">thriller_sports_viewer</div>
+          <div class="seg-chip seg-tech">electronics_buyer_12m</div>
+          <div class="seg-chip seg-walmart">walmart_grocery_regular</div>
+          <div class="seg-chip seg-freq">watchfree_engaged</div>
+        </div>
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">Walmart Commerce Signals (Live)</div>
+      <div class="data-rows">
+        <div class="data-row"><span class="data-label">Walmart account linked</span><span class="data-value walmart">Yes (unified login)</span></div>
+        <div class="data-row"><span class="data-label">Last purchase</span><span class="data-value">3 days ago (auto supplies + grocery)</span></div>
+        <div class="data-row"><span class="data-label">Auto category propensity</span><span class="data-value amber">0.73 (high intent)</span></div>
+        <div class="data-row"><span class="data-label">Walmart Connect segment</span><span class="data-value walmart">Auto Intender — Tier 1</span></div>
+        <div class="data-row"><span class="data-label">Grocery basket size</span><span class="data-value">Above avg ($127/week)</span></div>
+        <div class="data-row"><span class="data-label">Attribution window active</span><span class="data-value teal">30 days post-ad exposure</span></div>
+      </div>
+      <div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(0,113,220,.06);border:1px solid rgba(0,113,220,.12);font-size:11px;color:var(--text2);line-height:1.5">
+        <strong style="color:var(--walmart)">Commerce loop active:</strong> If Marcus purchases auto accessories at Walmart within 30 days of this ad, the exposure-to-purchase attribution is confirmed — enabling closed-loop reporting for the Ford advertiser.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 5: SEGMENT LOOKUP & FREQUENCY CHECK ══ -->
+<div class="stage-content" id="stage4">
+  <div class="stage-header">
+    <div class="stage-badge badge-segment">Stage 5: Segment Lookup &amp; Frequency Check</div>
+    <div class="stage-title">Redis executes all pre-bid enrichment in &lt;5ms</div>
+    <div class="stage-subtitle">Six atomic Redis operations happen before a single OpenRTB bid request is built. Audience segment membership, frequency cap counters, deal eligibility, and Walmart propensity scores — all sub-millisecond lookups that would take 50–200ms against Databricks or a relational database.</div>
+    <span class="component-tag">Redis RAM</span>
+    <span class="component-tag blue">Featureform</span>
+  </div>
+  <div class="viz-area" style="flex-direction:column;gap:18px">
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-name">AUDIENCE_SEGMENTS:{device_id}</div>
+        <div class="feat-desc">Pre-computed Databricks segment membership synced to Redis Set. Refreshed on 4h cycle. Multiple segments returned in single O(1) SMEMBERS call.</div>
+        <div class="feat-value-row"><span class="feat-value">[auto_intender, walmart_auto, thriller_viewer, ...]</span><span class="feat-latency">0.4 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">FREQ:{device_id}:FORD:F150:7D</div>
+        <div class="feat-desc">Weekly frequency cap counter for Ford F-150 creative. Atomic INCR with TTL. Checked before inclusion in bid request.</div>
+        <div class="feat-value-row"><span class="feat-value" style="color:var(--teal)">1 of 3 (eligible)</span><span class="feat-latency">0.2 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">FREQ:{device_id}:FORD:BRAND:7D</div>
+        <div class="feat-desc">Brand-level cap across all Ford creative. Prevents over-exposure across campaigns running simultaneously via different DSPs.</div>
+        <div class="feat-value-row"><span class="feat-value" style="color:var(--teal)">2 of 5 (eligible)</span><span class="feat-latency">0.2 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">VIEWING_CTX:{device_id}:NOW</div>
+        <div class="feat-desc">ACR-detected current content written to Redis from Kinesis consumer. Provides content genre, channel, and daypart for OpenRTB content object enrichment.</div>
+        <div class="feat-value-row"><span class="feat-value">thriller · prime · WatchFree+</span><span class="feat-latency">0.3 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">DEAL:{ford_pmp_id}:FLOOR</div>
+        <div class="feat-desc">Ford / The Trade Desk private marketplace deal floor price. Cached from ad server. Applied before OpenRTB auction fires to ensure deal eligibility.</div>
+        <div class="feat-value-row"><span class="feat-value" style="color:var(--amber)">$15.00 CPM floor · active</span><span class="feat-latency">0.2 ms</span></div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-name">WALMART_PROPENSITY:{device_id}:AUTO</div>
+        <div class="feat-desc">Purchase propensity score from Walmart Connect, pre-computed by Databricks, written to Redis. Appended to bid request as custom extension field.</div>
+        <div class="feat-value-row"><span class="feat-value" style="color:var(--amber)">0.73 (high intent)</span><span class="feat-latency">0.3 ms</span></div>
+      </div>
+    </div>
+    <div class="viz-panel" style="flex:0">
+      <div class="viz-panel-title">Pre-Bid Enrichment Performance</div>
+      <div style="display:flex;gap:24px;align-items:center">
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Total Redis Ops</div><div style="font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono)">6</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Total Latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">1.6 ms</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">vs. DB Equivalent</div><div style="font-size:28px;font-weight:700;color:var(--red);font-family:var(--mono)">~180 ms</div></div>
+        <div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Budget Remaining</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">~298ms</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 6: OPENRTB AUCTION ══ -->
+<div class="stage-content" id="stage5">
+  <div class="stage-header">
+    <div class="stage-badge badge-auction">Stage 6: OpenRTB Auction</div>
+    <div class="stage-title">Bid request fires enriched. Three DSPs compete. One wins.</div>
+    <div class="stage-subtitle">The pre-enriched bid request — carrying Marcus's segment membership, Walmart propensity score, ACR viewing context, and deal flags — goes to Magnite/SpringServe. DSPs receive a signal-rich impression and bid accordingly. The auction completes in ~200ms. Redis made it possible.</div>
+    <span class="component-tag blue">Magnite / SpringServe SSP</span>
+    <span class="component-tag">OpenRTB 2.6</span>
+  </div>
+  <div class="viz-area" style="flex-direction:column;gap:20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">Slot: 30s mid-roll · WatchFree+ · prime daypart</div>
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(255,188,87,.06);border:1px solid rgba(255,188,87,.12);font-size:12px;color:var(--amber)">PMP Deal active: Ford / The Trade Desk — $15 floor</div>
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(0,113,220,.06);border:1px solid rgba(0,113,220,.12);font-size:12px;color:var(--walmart)">Walmart propensity: 0.73 auto intent — sent in bid ext</div>
+      <div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Auction completed in 198ms</div>
+    </div>
+    <div class="bid-grid">
+      <div class="bid-card winner">
+        <div class="bid-rank">#1 — Winning Bid</div>
+        <div class="bid-dsp">The Trade Desk</div>
+        <div class="bid-advertiser">Ford Motor Company · F-150 Lightning</div>
+        <div class="bid-cpm">$18.40 <span style="font-size:14px;color:var(--text3)">CPM</span></div>
+        <div class="bid-targeting">Targeting: Walmart auto_intender Tier 1 + Detroit DMA + prime daypart + PMP deal activation</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Ford wins because Marcus's Walmart-linked auto propensity (0.73) triggered the Ford PMP deal. Incremental reach over linear confirmed via ACR.</div>
+        <div class="score-bar"><div class="score-fill" style="--score:94%;background:var(--amber)"></div></div>
+        <div class="score-label"><span>Match score</span><span style="color:var(--amber)">94%</span></div>
+      </div>
+      <div class="bid-card">
+        <div class="bid-rank">#2</div>
+        <div class="bid-dsp">Yahoo DSP</div>
+        <div class="bid-advertiser">Walmart Grocery · "Fresh &amp; Fast"</div>
+        <div class="bid-cpm">$14.20 <span style="font-size:14px;color:var(--text3)">CPM</span></div>
+        <div class="bid-targeting">Targeting: Walmart first-party grocery segment + household IP + WatchFree+ engaged</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Strong Walmart segment match but no PMP deal. Loses to Ford's deal floor premium. Walmart DSP data confirms grocery intent but auto outranks here.</div>
+        <div class="score-bar"><div class="score-fill" style="--score:81%;background:var(--blue)"></div></div>
+        <div class="score-label"><span>Match score</span><span style="color:var(--blue)">81%</span></div>
+      </div>
+      <div class="bid-card">
+        <div class="bid-rank">#3</div>
+        <div class="bid-dsp">Magnite Direct</div>
+        <div class="bid-advertiser">State Farm Insurance</div>
+        <div class="bid-cpm">$11.80 <span style="font-size:14px;color:var(--text3)">CPM</span></div>
+        <div class="bid-targeting">Targeting: Detroit DMA contextual + homeowner demographic overlay (Acxiom)</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">No Walmart data access. Relies on 3rd party demographic overlay only. Contextual match is solid but CPM ceiling limited without first-party signal.</div>
+        <div class="score-bar"><div class="score-fill" style="--score:68%;background:var(--text3)"></div></div>
+        <div class="score-label"><span>Match score</span><span>68%</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 7: COMMERCE & REVENUE ══ -->
+<div class="stage-content" id="stage6">
+  <div class="stage-header">
+    <div class="stage-badge badge-revenue">Stage 7: Commerce &amp; Revenue</div>
+    <div class="stage-title">Walmart data turns a $10 impression into an $18 impression — with attribution</div>
+    <div class="stage-subtitle">The post-acquisition thesis: Walmart's 150M weekly shopper signals don't just improve targeting — they create a closed-loop attribution system that no other CTV platform can match. TV ad exposure links directly to in-store or online Walmart purchase, proving ROI for advertisers who previously had no visibility past the click.</div>
+    <span class="component-tag walmart">Walmart Connect</span>
+    <span class="component-tag blue">Magnite / SpringServe</span>
+  </div>
+  <div class="viz-area">
+    <div class="viz-panel" style="flex:2">
+      <div class="viz-panel-title">CPM Uplift: Signal Quality vs. Revenue</div>
+      <div class="data-rows" style="margin-bottom:20px">
+        <div class="data-row"><span class="data-label">Contextual only (no data)</span><span class="data-value red">$8–10 CPM</span></div>
+        <div class="data-row"><span class="data-label">+ ACR segment (Inscape)</span><span class="data-value">$12–14 CPM</span></div>
+        <div class="data-row"><span class="data-label">+ 3rd party enrichment (LiveRamp/IRI)</span><span class="data-value">$14–16 CPM</span></div>
+        <div class="data-row"><span class="data-label">+ Walmart first-party (auto intender)</span><span class="data-value amber">$18–25 CPM</span></div>
+        <div class="data-row"><span class="data-label">+ PMP deal activation</span><span class="data-value amber">$18.40 CPM (confirmed)</span></div>
+      </div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(0,113,220,.05);border:1px solid rgba(0,113,220,.12)">
+        <strong style="color:var(--walmart)">The Walmart acquisition thesis:</strong> Vizio's Platform+ segment was already <strong style="color:var(--text)">100% of Vizio's gross profit</strong> before the acquisition. Walmart's purchase data makes every impression incrementally more valuable — and for the first time, closes the loop between "saw the ad on TV" and "bought the product at Walmart."
+      </div>
+    </div>
+    <div class="viz-panel">
+      <div class="viz-panel-title">Closed-Loop Attribution Chain</div>
+      <div class="rev-compare" style="margin-bottom:20px">
+        <div class="rev-card before"><div class="rev-value" style="color:var(--text3)">$10</div><div class="rev-label">Contextual CPM<br>no attribution</div></div>
+        <div class="rev-arrow">&rarr;</div>
+        <div class="rev-card after"><div class="rev-value" style="color:var(--amber)">$18.40</div><div class="rev-label">Walmart-enriched CPM<br>+ closed-loop proof</div></div>
+      </div>
+      <div class="attr-flow">
+        <div class="attr-step">
+          <div class="attr-icon" style="background:rgba(249,115,22,.15);color:var(--orange)">📺</div>
+          <div><div class="attr-text">Ford F-150 ad served to Marcus</div><div class="attr-sub">WatchFree+ · mid-roll · 8:54 PM · 30s view</div></div>
+          <div class="attr-check" style="color:var(--teal)">&#x2713; Logged</div>
+        </div>
+        <div class="attr-step">
+          <div class="attr-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">&#x1F4F1;</div>
+          <div><div class="attr-text">Walmart account activity monitored</div><div class="attr-sub">30-day attribution window · login-linked · privacy-safe</div></div>
+          <div class="attr-check" style="color:var(--amber)">&#x23F3; Active</div>
+        </div>
+        <div class="attr-step">
+          <div class="attr-icon" style="background:rgba(0,113,220,.12);color:var(--walmart)">&#x1F6D2;</div>
+          <div><div class="attr-text">Marcus visits Walmart Auto department</div><div class="attr-sub">Automotive accessories purchase — 8 days post-exposure</div></div>
+          <div class="attr-check" style="color:var(--teal)">&#x2713; Attributed</div>
+        </div>
+        <div class="attr-step">
+          <div class="attr-icon" style="background:rgba(255,188,87,.12);color:var(--amber)">&#x1F4CA;</div>
+          <div><div class="attr-text">Ford receives closed-loop report</div><div class="attr-sub">TV ad exposure → Walmart purchase confirmed · incremental reach vs. linear TV validated</div></div>
+          <div class="attr-check" style="color:var(--teal)">&#x2713; Delivered</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+  <div class="stage-header">
+    <div class="stage-badge badge-outcome">Stage 8: Outcome</div>
+    <div class="stage-title">Same ad break. Two very different results.</div>
+    <div class="stage-subtitle">Without Redis pre-enrichment, the break fires with stale data — floor-priced generic ad, no attribution possible. With Redis, six sub-millisecond lookups transform the impression into a premium, closed-loop opportunity for Ford and a better experience for Marcus.</div>
+  </div>
+  <div class="outcome-split">
+    <div class="outcome-col">
+      <div class="outcome-header generic">Without Redis (Today)</div>
+      <div class="ad-screen">
+        <div class="ad-video" style="background:linear-gradient(135deg,#1a1a1a,#111)">
+          <div style="font-size:32px;opacity:.15">&#x25B6;</div>
+          <div class="ad-overlay">
+            <div class="ad-badge" style="background:rgba(255,255,255,.1);color:var(--text3)">AD</div>
+            <div class="ad-title" style="color:var(--text3)">Generic Auto Ad</div>
+            <div class="ad-sub">Contextual targeting only — DMA match</div>
+          </div>
+        </div>
+        <div class="ad-meta">
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--text3)">$9.40</div><div class="ad-meta-label">CPM achieved</div></div>
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--text3)">DMA only</div><div class="ad-meta-label">Targeting</div></div>
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--text3)">None</div><div class="ad-meta-label">Attribution</div></div>
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--red)">~210ms</div><div class="ad-meta-label">DB lookup overhead</div></div>
+        </div>
+      </div>
+      <div class="outcome-metrics generic-m">
+        <div class="outcome-metric"><div class="outcome-metric-value">$9.40</div><div class="outcome-metric-label">CPM</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">—</div><div class="outcome-metric-label">Attribution</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">Generic</div><div class="outcome-metric-label">Segment</div></div>
+      </div>
+    </div>
+    <div class="outcome-col">
+      <div class="outcome-header personalized">Redis + Walmart Powered</div>
+      <div class="ad-screen winner-screen">
+        <div class="ad-video" style="background:linear-gradient(135deg,#1a0f00,#2a1800)">
+          <div style="font-size:32px;opacity:.2;color:var(--amber)">&#x26A1;</div>
+          <div class="ad-overlay">
+            <div class="ad-badge" style="background:rgba(255,188,87,.2);color:var(--amber)">FORD · PMP DEAL</div>
+            <div class="ad-title">F-150 Lightning</div>
+            <div class="ad-sub">Walmart Auto Intender · Detroit DMA · prime</div>
+          </div>
+        </div>
+        <div class="ad-meta" style="background:rgba(255,188,87,.04)">
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--amber)">$18.40</div><div class="ad-meta-label">CPM achieved</div></div>
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--walmart)">Walmart 1P</div><div class="ad-meta-label">Targeting</div></div>
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--teal)">Closed-loop</div><div class="ad-meta-label">Attribution</div></div>
+          <div class="ad-meta-item"><div class="ad-meta-value" style="color:var(--teal)">1.6ms</div><div class="ad-meta-label">Redis enrichment</div></div>
+        </div>
+      </div>
+      <div class="outcome-metrics personalized-m">
+        <div class="outcome-metric"><div class="outcome-metric-value">$18.40</div><div class="outcome-metric-label">CPM</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">+96%</div><div class="outcome-metric-label">CPM lift</div></div>
+        <div class="outcome-metric"><div class="outcome-metric-value">Walmart</div><div class="outcome-metric-label">Attribution</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+  <div class="stage-header">
+    <div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div>
+    <div class="stage-title">Eight stages. Under ten milliseconds. One premium ad impression.</div>
+    <div class="stage-subtitle">Kinesis, S3/Delta Lake, Databricks, and Walmart Connect feed Redis. Redis pre-enriches every impression in &lt;2ms. The OpenRTB auction fires with signal-rich context. Magnite/SpringServe routes to the winning DSP. The result: a $18.40 CPM impression with closed-loop Walmart attribution — vs. $9.40 contextual without Redis.</div>
+  </div>
+  <div class="arch-wrap">
+  <div class="arch-frame">
+
+    <div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Kinesis</h4><p>Live ACR telemetry, second-by-second</p></div>
+      <div class="arch-node"><h4>S3 / Delta Lake</h4><p>ACR archive, viewing history, segment training data</p></div>
+      <div class="arch-node"><h4>Databricks</h4><p>500+ audience segment computation, ML training</p></div>
+      <div class="arch-node"><h4>Walmart Connect</h4><p>150M shopper signals, closed-loop attribution</p></div>
+      <div class="arch-node"><h4>3rd Party Data</h4><p>LiveRamp, IRI/Circana, Acxiom, Experian</p></div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest &amp; Processing</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Inscape ACR Engine</h4><p>Glass-level fingerprinting, input-agnostic, 24M opted-in TVs</p></div>
+      <div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync to Redis hot path</p></div>
+      <div class="arch-node"><h4>Spark Structured Streaming</h4><p>Kinesis → Delta Lake + low-latency Redis writes</p></div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-context"><div class="arch-tier-label">Redis Hot Path (Ad Decisioning Context)</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Redis RAM</h4><p>Frequency caps (INCR), segment membership, live viewing context</p></div>
+      <div class="arch-node"><h4>Redis Flex</h4><p>Full audience history, creative performance embeddings</p></div>
+      <div class="arch-node"><h4>Featureform</h4><p>ML feature store, ad scoring features</p></div>
+    </div>
+    <div class="arch-data-strip">
+      <div class="arch-data-chip">Freq Caps</div>
+      <div class="arch-data-chip">Segments</div>
+      <div class="arch-data-chip">Identity Map</div>
+      <div class="arch-data-chip">Deal Floors</div>
+      <div class="arch-data-chip">Viewing Context</div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>Rules / Policy</h4><p>Freq caps, competitive suppression, brand safety, floor prices</p></div>
+      <div class="arch-node"><h4>ML Ranker</h4><p>Audience-creative relevance scoring, CPM optimization</p></div>
+      <div class="arch-node"><h4>Vector Search</h4><p>Creative-audience semantic matching</p></div>
+      <div class="arch-node"><h4>OpenRTB Auction</h4><p>Magnite/SpringServe SSP → DSPs (100–250ms)</p></div>
+    </div></div>
+
+    <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+    <div class="arch-tier tier-act"><div class="arch-tier-label">Ad Delivery Surfaces</div>
+    <div class="arch-tier-row">
+      <div class="arch-node"><h4>WatchFree+ SSAI</h4><p>Pre-roll &amp; mid-roll video, server-side stitched</p></div>
+      <div class="arch-node"><h4>SmartCast Home</h4><p>SpringServe tiles, pause ads, native banners</p></div>
+      <div class="arch-node"><h4>Linear Addressable</h4><p>Project OAR watermark swap (FreeWheel / GAM)</p></div>
+      <div class="arch-node"><h4>Cross-Screen</h4><p>Household IP retargeting, Walmart omnichannel</p></div>
+    </div></div>
+
+    <div class="arch-feedback">
+      <div class="arch-feedback-icon">&#x21BA;</div>
+      <span><strong style="color:var(--red)">Learn:</strong>&nbsp; Ad impression events &rarr; Kinesis &rarr; Databricks segment refresh &rarr; Updated models &rarr; Redis hot path &nbsp;|&nbsp; <strong style="color:var(--walmart)">Commerce loop:</strong>&nbsp; TV exposure &rarr; Walmart purchase &rarr; Closed-loop attribution &rarr; Campaign optimization</span>
+    </div>
+
+  </div>
+  <div class="arch-callouts">
+    <div class="arch-callout"><div class="arch-callout-label">Redis Pre-Bid Latency</div><div class="arch-callout-value teal">1.6 ms</div></div>
+    <div class="arch-callout"><div class="arch-callout-label">CPM Lift (Walmart data)</div><div class="arch-callout-value amber">$9.40 &rarr; $18.40</div></div>
+    <div class="arch-callout"><div class="arch-callout-label">Attribution Model</div><div class="arch-callout-value walmart">Closed-loop (Walmart)</div></div>
+  </div>
+  </div>
+</div>
+
+</div><!-- end stage-viewport -->
+
+<div class="nav-bar">
+  <div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div>
+  <div class="nav-buttons">
+    <button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button>
+    <button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button>
+  </div>
+</div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.0ms','1.4ms','2.8ms','4.4ms','6.0ms','7.4ms','8.1ms','8.1ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){
+  document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});
+  document.getElementById('stageCounter').textContent=(current+1)+' / '+total;
+  document.getElementById('globalLatency').textContent=latencies[current];
+  const back=document.getElementById('btnBack');
+  const next=document.getElementById('btnNext');
+  back.disabled=current===0;
+  if(current===total-1){
+    next.textContent='Restart';next.className='nav-btn restart';
+    next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}
+  }else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}
+}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
