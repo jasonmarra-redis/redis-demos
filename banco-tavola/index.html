@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | Banco Tavola</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --tavola-green:#00A07A;--tavola-dark:#0B2A2A;--tavola-card:#0F1628;--tavola-border:rgba(255,255,255,.08);
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:780px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.viewer-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.viewer-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--tavola-green),#00D4A0);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.viewer-name{font-size:17px;font-weight:700}.viewer-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.viewer-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(0,160,122,.12);color:var(--tavola-green);border:1px solid rgba(0,160,122,.3)}
+.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.content-card.winner{border-color:var(--red);background:rgba(220,56,44,.05);box-shadow:0 0 24px rgba(220,56,44,.12)}
+.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.content-card.winner .content-rank{color:var(--red)}
+.content-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.content-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-block{background:rgba(220,56,44,.15);color:var(--red)}
+.src-friction{background:rgba(255,188,87,.15);color:var(--amber)}
+.src-allow{background:rgba(0,201,167,.15);color:var(--teal)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Tavola app mockup */
+.tavola-screen{background:#F4F5F7;border-radius:24px;border:8px solid #1a1a1a;overflow:hidden;position:relative;color:#222;display:flex;flex-direction:column}
+.tavola-statusbar{background:#1a1a1a;color:#fff;padding:6px 18px;display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono)}
+.tavola-header{background:var(--tavola-green);color:#fff;padding:18px 20px;display:flex;align-items:center;gap:12px}
+.tavola-header-logo{font-weight:800;font-size:18px;letter-spacing:-.5px}
+.tavola-header-title{font-size:13px;font-weight:600;margin-left:auto;opacity:.95}
+.tavola-body{padding:20px;display:flex;flex-direction:column;gap:14px;flex:1}
+.tavola-section-label{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:1.2px}
+.tavola-amount-display{background:#fff;border-radius:12px;padding:18px;text-align:center;border:1px solid #E0E0E0}
+.tavola-amount-value{font-size:26px;font-weight:800;color:#222;font-family:var(--mono)}
+.tavola-amount-currency{font-size:14px;color:#666;margin-right:6px}
+.tavola-recipient{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #E0E0E0;display:flex;align-items:center;gap:12px}
+.tavola-recipient-avatar{width:38px;height:38px;border-radius:50%;background:#EEE;display:flex;align-items:center;justify-content:center;font-weight:700;color:#666;font-size:13px}
+.tavola-recipient-info{flex:1}
+.tavola-recipient-name{font-size:13px;font-weight:700;color:#222}
+.tavola-recipient-detail{font-size:10px;color:#888;margin-top:1px;font-family:var(--mono)}
+.tavola-cta-btn{padding:14px;border-radius:10px;text-align:center;font-weight:700;font-size:13px;letter-spacing:.5px}
+.tavola-cta-btn.confirm{background:var(--tavola-green);color:#fff}
+.tavola-cta-btn.disabled{background:#E0E0E0;color:#999}
+.tavola-warning-banner{background:#FFEBEC;border:1px solid var(--red);border-radius:10px;padding:14px;display:flex;gap:10px;align-items:flex-start}
+.tavola-warning-icon{width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.tavola-warning-text{font-size:11px;line-height:1.5;color:#3A0000}
+.tavola-warning-text strong{color:var(--red);display:block;margin-bottom:4px;font-size:12px}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-value.bad{color:var(--red)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | Banco Tavola</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Pix Initiated</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Decision</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Loss Avoidance</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Banco Tavola's Real-Time Pix Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Tavola's source systems feed Redis. Redis decides. The Pix authorization channel acts. Every Pix transaction passes through this architecture in under 80 milliseconds, well inside the BCB 100ms SLA.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Core Banking System</h4><p>Account 360 / balances</p></div>
+<div class="arch-node"><h4>Customer Master Database</h4><p>Customer master / KYC</p></div>
+<div class="arch-node"><h4>ML Platform</h4><p>Fraud ML / graph features</p></div>
+<div class="arch-node"><h4>Event Streaming Platform</h4><p>SPI events / device telemetry</p></div>
+<div class="arch-node"><h4>Regulatory + Industry Feeds</h4><p>BCB DICT, Resolution 6, MED stream</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, core banking and customer data into Redis with no application rewrite</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>Feature pipeline orchestration, train/serve parity</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Operational 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live session and device state</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 24-month transaction history, mule graph</p></div>
+<div class="arch-node"><h4>Featureform on Redis</h4><p>Feature store, online serving, identical to training</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">JSON Profiles</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Streams</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Graph</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Policy</h4><p>Velocity, BCB compliance, MED hooks</p></div>
+<div class="arch-node"><h4>ML Fraud Scorer</h4><p>Gradient-boosted ensemble + GNN</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Mule similarity, scam pattern match</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>GenAI in-app scam alert generation</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Pix Authorization</h4><p>Allow / friction / block at SPI</p></div>
+<div class="arch-node"><h4>Tavola App In-Flow Alert</h4><p>Smart friction + scam warning</p></div>
+<div class="arch-node"><h4>Step-Up Auth</h4><p>Biometric / token re-challenge</p></div>
+<div class="arch-node"><h4>Industry Signal Share</h4><p>BCB Resolution 6 + DICT update</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Event stream &rarr; ML platform GNN retraining &rarr; Updated mule graph + scam vectors &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">End-to-End Decision Latency</div><div class="arch-callout-value teal">&lt;80 ms (P99)</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Pix Decisions Per Second</div><div class="arch-callout-value orange">12,000 sustained</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Annual MED Loss Avoidance</div><div class="arch-callout-value amber">R$ 1.2B target</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: PIX INITIATED ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Pix Initiated</div><div class="stage-title">Carla starts a Pix transfer at 11:47 PM</div><div class="stage-subtitle">A high-value Tavola customer initiates a Pix to a key she has never sent to before. Redis has under 100 milliseconds, the BCB SLA, to decide whether the transaction is safe, suspicious, or fraudulent.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Pix Authorization Event</div>
+<div class="viewer-card"><div class="viewer-avatar">CF</div><div><div class="viewer-name">Carla Beatriz Fontes</div><div class="viewer-detail">Tavola Prime customer | São Paulo, SP | Member since 2014 | Avg monthly Pix volume R$ 14,200</div></div><div class="viewer-badge">PRIME TIER</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">pix_payment_initiate</span></div>
+<div class="data-row"><span class="data-label">Time</span><span class="data-value orange">23:47 BRT (off-pattern hour)</span></div>
+<div class="data-row"><span class="data-label">Channel</span><span class="data-value">Tavola mobile app, iOS 18.2</span></div>
+<div class="data-row"><span class="data-label">Amount</span><span class="data-value red">R$ 8,500.00</span></div>
+<div class="data-row"><span class="data-label">Recipient Pix key (CPF)</span><span class="data-value">***.***.412-09 (never used before)</span></div>
+<div class="data-row"><span class="data-label">Recipient name (DICT)</span><span class="data-value">Roberto Almeida Souza</span></div>
+<div class="data-row"><span class="data-label">Recipient bank</span><span class="data-value">Tier-3 PJ digital bank (created Feb 2026)</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Matters</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Carla's average Pix is <strong style="color:var(--orange)">R$ 340</strong>. This one is <strong style="color:var(--red)">25x larger</strong>, after 11 PM, to a brand-new key at a recently-opened PJ account.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">71% of fraud in Brazil is now Pix-based. Two of every three mule accounts are PJ accounts. The pattern fits.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(249,115,22,.06);border:1px solid rgba(249,115,22,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--orange)">The window:</strong> BCB Normative 491 mandates the decision in under 100ms. Block a real customer and Carla calls the contact center. Allow a fraud and Tavola owes the MED reimbursement plus regulatory exposure.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> Batch fraud models scored Carla yesterday morning. They cannot see this Pix, this device session, or the recipient's last six hours of inbound activity. The transaction clears.</div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Tavola's source systems flow into Redis</div><div class="stage-subtitle">RDI streams change data from the core banking and customer master systems without a rewrite. Featureform orchestrates feature delivery from the ML platform and event stream. Five sources converge into one sub-millisecond context tier.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#4F8CFF">CBS</div><div><div class="flow-source">Core Banking System &middot; Account Core</div><div class="flow-detail">Balances | Daily Pix limits | Account standing | 41M active accounts | CDC via RDI</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">CMD</div><div><div class="flow-source">Customer Master Database</div><div class="flow-detail">KYC | Demographics | Device registry | Beneficiary history | CDC via RDI</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">MLP</div><div><div class="flow-source">ML Platform &middot; Fraud Models + Graph</div><div class="flow-detail">Mule account graph | Scam pattern embeddings | Behavioral baselines | Refreshed every 15 min</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">EVT</div><div><div class="flow-source">Event Streaming Platform</div><div class="flow-detail">Pix events from BCB SPI | App session telemetry | Geolocation | Biometric signals</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">REG</div><div><div class="flow-source">Regulatory + Industry Feeds</div><div class="flow-detail">Industry-shared fraud accounts | DICT key reputation | MED notification stream</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+<div class="data-row"><span class="data-label">Core banking sync lag</span><span class="data-value teal">&lt;120ms</span></div>
+<div class="data-row"><span class="data-label">Customer master sync lag</span><span class="data-value teal">&lt;90ms</span></div>
+<div class="data-row"><span class="data-label">ML model refresh</span><span class="data-value teal">15 min</span></div>
+<div class="data-row"><span class="data-label">Event stream lag</span><span class="data-value teal">&lt;40ms</span></div>
+<div class="data-row"><span class="data-label">BCB Res 6 feed</span><span class="data-value teal">Streaming</span></div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Carla's customer 360 + the recipient's live signals</div><div class="stage-subtitle">Redis assembles the full picture in a single round trip. Carla's 24-month behavioral baseline on the left, the recipient account's last six hours on the right. The fraud pattern only becomes visible when both are in one place.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Customer 360 &middot; Carla (Sender)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Tenure</span><span class="data-value">12 years, Prime tier 2019</span></div>
+<div class="data-row"><span class="data-label">Avg Pix amount (24mo)</span><span class="data-value teal">R$ 340</span></div>
+<div class="data-row"><span class="data-label">Largest prior Pix</span><span class="data-value">R$ 2,200 (Jan 2025)</span></div>
+<div class="data-row"><span class="data-label">Typical recipients</span><span class="data-value">8 known keys, all repeat</span></div>
+<div class="data-row"><span class="data-label">Active hours pattern</span><span class="data-value">07:00 - 22:00 BRT (98%)</span></div>
+<div class="data-row"><span class="data-label">Device registered</span><span class="data-value teal">Yes (since 2022, biometric OK)</span></div>
+<div class="data-row"><span class="data-label">Recent in-app behavior</span><span class="data-value orange">12 min on phone, paste action detected</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Recipient Live Signals (Last 6 Hours)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Account age</span><span class="data-value red">62 days (PJ digital bank)</span></div>
+<div class="data-row"><span class="data-label">Inbound Pix volume (6h)</span><span class="data-value red">R$ 47,300 from 9 senders</span></div>
+<div class="data-row"><span class="data-label">Outbound Pix (6h)</span><span class="data-value red">R$ 46,800 to 4 keys</span></div>
+<div class="data-row"><span class="data-label">Net balance held</span><span class="data-value amber">R$ 500 (pass-through pattern)</span></div>
+<div class="data-row"><span class="data-label">DICT key reputation</span><span class="data-value amber">No flag, but 3 of 9 senders are first-time</span></div>
+<div class="data-row"><span class="data-label">Mule graph proximity</span><span class="data-value red">2 hops to known fraud cluster</span></div>
+<div class="data-row"><span class="data-label">BCB Resolution 6 industry signal</span><span class="data-value red">2 fraud reports in last 90 min</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Pattern detected:</strong> The recipient is a textbook mule. Money in, money out, near-zero balance held. Two industry fraud reports already filed today through BCB Resolution 6.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the fraud scorer</div><div class="stage-subtitle">Featureform pulls every feature the ensemble needs into one vector. Sender features, recipient features, device features, and graph features merge in sub-millisecond. No feature lookups during scoring, no train/serve skew.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">SENDER_AMOUNT_ZSCORE</div><div class="feat-desc">Pix amount as standard deviations above sender's 24-month rolling mean</div><div class="feat-value-row"><span class="feat-value">+11.4 σ</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">RECIPIENT_PASSTHROUGH_RATIO</div><div class="feat-desc">6-hour outflow divided by inflow on recipient account, > 0.95 = mule pattern</div><div class="feat-value-row"><span class="feat-value">0.99</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">MULE_GRAPH_HOP_DISTANCE</div><div class="feat-desc">Shortest path from recipient to a known fraud cluster, computed on Redis graph</div><div class="feat-value-row"><span class="feat-value">2 hops</span><span class="feat-latency">0.7 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">DEVICE_PASTE_INDICATOR</div><div class="feat-desc">Pix key entered via clipboard paste vs typed vs scanned, social engineering signal</div><div class="feat-value-row"><span class="feat-value">paste_detected</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">SCAM_PATTERN_VECTOR_SIM</div><div class="feat-desc">Cosine similarity of this transaction vector to known scam typologies (vector search)</div><div class="feat-value-row"><span class="feat-value">0.91 (familia_emergencia)</span><span class="feat-latency">0.6 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">BCB_RES6_INDUSTRY_FLAG</div><div class="feat-desc">Recent industry fraud reports against this recipient via BCB Resolution 6 sharing</div><div class="feat-value-row"><span class="feat-value">2 in last 90 min</span><span class="feat-latency">0.3 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0">
+<div class="viz-panel-title">Feature Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+<div style="flex:1;min-width:140px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Total Features Hydrated</div><div style="font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono)">186</div></div>
+<div style="flex:1;min-width:140px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">2.1 ms</div></div>
+<div style="flex:1;min-width:140px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Online / Offline Parity</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1;min-width:140px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Cache Hit Rate</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">99.8%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: DECISION (RANKING) ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Decision</div><div class="stage-title">Three candidate actions, scored in real time</div><div class="stage-subtitle">The ML ensemble scores three possible outcomes: allow, friction, or block. Rules layer applies BCB compliance and customer-impact suppression. The winner balances loss avoidance against false-positive cost.</div><span class="component-tag">ML Fraud Scorer</span><span class="component-tag">Vector Search</span><span class="component-tag">Rules Engine</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">Fraud score: 0.94 / 1.00</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">Sender Z-score breach: amount &gt; 11σ</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,188,87,.06);border:1px solid rgba(255,188,87,.12);font-size:12px;color:var(--amber)">Vector match: familia_emergencia scam (91%)</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Customer-impact rule: never silent-block Prime &gt;5yr</div>
+</div>
+<div class="content-grid">
+<div class="content-card"><div class="content-rank">Option A &middot; Risk Tolerated</div><div class="content-source src-allow">ALLOW</div><div class="content-title">Process Pix immediately</div><div class="content-meta">Loss exposure if fraud: R$ 8,500 + MED reimbursement</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">No friction for Carla. But fraud score 0.94 means high probability of loss. Tavola eats the MED claim.</div><div class="score-bar"><div class="score-fill" style="--score:18%;background:var(--red)"></div></div><div class="score-label"><span>Confidence safe</span><span style="color:var(--red)">6%</span></div></div>
+<div class="content-card winner"><div class="content-rank">Option B &middot; Winner</div><div class="content-source src-friction">SMART FRICTION + STEP-UP</div><div class="content-title">In-app scam alert + biometric re-challenge</div><div class="content-meta">Carla sees a contextual warning, must re-confirm with Face ID</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Pattern matches familia_emergencia scam. Show Carla the warning, force biometric. If she still confirms, transaction proceeds. If she cancels, fraud avoided with full agency preserved.</div><div class="score-bar"><div class="score-fill" style="--score:94%;background:var(--red)"></div></div><div class="score-label"><span>Optimal action</span><span style="color:var(--red)">94%</span></div></div>
+<div class="content-card"><div class="content-rank">Option C &middot; Hard Stop</div><div class="content-source src-block">SILENT BLOCK</div><div class="content-title">Reject Pix at SPI, no explanation</div><div class="content-meta">Suppression rule triggers: Carla is Prime &gt;5yr, customer-impact too high</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Blocks the fraud but breaks trust with a 12-year customer. Triggers contact center call. Rule layer suppresses this option.</div><div class="score-bar"><div class="score-fill" style="--score:42%;background:var(--text3)"></div></div><div class="score-label"><span>Suppressed by policy</span><span style="color:var(--text3)">N/A</span></div></div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 7: LOSS AVOIDANCE ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Loss Avoidance</div><div class="stage-title">Where the revenue protection compounds</div><div class="stage-subtitle">Every Pix decision Tavola makes either avoids a loss, prevents a false-positive contact center call, or both. Multiplied across 4.2M Pix transactions per day, the economics rewrite the fraud P&amp;L.</div><span class="component-tag">ML Fraud Scorer</span><span class="component-tag">LangCache</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">The Four-Way Economics of a Pix Decision</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Avg confirmed Pix fraud loss (per case)</span><span class="data-value red">R$ 2,840</span></div>
+<div class="data-row"><span class="data-label">MED reimbursement burden when funds gone</span><span class="data-value red">~ 78% of cases</span></div>
+<div class="data-row"><span class="data-label">False-positive contact center cost</span><span class="data-value amber">R$ 47 per call + churn risk</span></div>
+<div class="data-row"><span class="data-label">Prime customer attrition cost (single bad block)</span><span class="data-value red">R$ 3,200 LTV impact</span></div>
+<div class="data-row"><span class="data-label">Smart friction conversion (customer cancels)</span><span class="data-value teal">61% of high-risk Pix</span></div>
+<div class="data-row"><span class="data-label">Smart friction false-positive rate</span><span class="data-value teal">2.3%</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> Tavola is not just avoiding fraud loss. Tavola is avoiding the regulatory MED burden, avoiding the contact center cost of bad blocks, and protecting the Prime customer LTV that traditional rules-based systems destroy. Real-time decisioning is the only architecture that can balance all four at once.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Annualized Impact at Scale</div>
+<div class="rev-compare">
+<div class="rev-card before"><div class="rev-value" style="color:var(--text3)">R$ 487M</div><div class="rev-label">Current fraud loss + MED reimbursements<br>(batch models, FY 2025)</div></div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">R$ 1.2B</div><div class="rev-label">Avoided losses + retained customer LTV<br>(real-time on Redis, FY 2026 target)</div></div>
+</div>
+<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">Across <strong style="color:var(--text)">4.2M Pix transactions per day</strong>, every basis point of fraud reduction compounds. MED 2.0 (Feb 2026) raises the stakes further by extending bank liability to five layers of mule transfers.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Same Pix flow. Smarter decision in every transaction.</div><div class="stage-subtitle">Tavola's Pix flow does not change. The customer still scans, types, or pastes a key. Redis does not change the journey. Redis changes what the bank can see at the moment of authorization, so the right decision happens in the right cases.</div></div>
+<div class="outcome-split">
+<!-- GENERIC -->
+<div class="outcome-col">
+<div class="outcome-header generic">Batch Models (Today)</div>
+<div class="tavola-screen" style="min-height:520px">
+<div class="tavola-statusbar"><span>23:47</span><span>5G &middot; 87%</span></div>
+<div class="tavola-header"><div class="tavola-header-logo" style="opacity:.5">Tavola</div><div class="tavola-header-title" style="opacity:.6">Confirmar Pix</div></div>
+<div class="tavola-body" style="background:#F4F5F7">
+<div class="tavola-section-label" style="color:#999">Valor</div>
+<div class="tavola-amount-display" style="opacity:.85"><span class="tavola-amount-currency" style="color:#999">R$</span><span class="tavola-amount-value" style="color:#666">8.500,00</span></div>
+<div class="tavola-section-label" style="color:#999">Para</div>
+<div class="tavola-recipient" style="opacity:.85"><div class="tavola-recipient-avatar">RA</div><div class="tavola-recipient-info"><div class="tavola-recipient-name" style="color:#666">Roberto A. Souza</div><div class="tavola-recipient-detail" style="color:#999">CPF ***.***.412-09</div></div></div>
+<div style="flex:1"></div>
+<div class="tavola-cta-btn confirm" style="background:#999;color:#fff">Confirmar Pix</div>
+<div style="font-size:9px;color:#999;text-align:center;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Sem aviso &middot; transação prossegue</div>
+</div>
+</div>
+<div class="outcome-metrics generic-m">
+<div class="outcome-metric"><div class="outcome-metric-value bad">R$ 8.5K</div><div class="outcome-metric-label">Loss + MED owed</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value bad">94%</div><div class="outcome-metric-label">Fraud probability</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value bad">+1</div><div class="outcome-metric-label">Trust hit on Carla</div></div>
+</div>
+</div>
+<!-- PERSONALIZED -->
+<div class="outcome-col">
+<div class="outcome-header personalized">Real-Time Decisioning on Redis</div>
+<div class="tavola-screen" style="border-color:var(--tavola-green);min-height:520px">
+<div class="tavola-statusbar"><span>23:47</span><span>5G &middot; 87%</span></div>
+<div class="tavola-header"><div class="tavola-header-logo">Tavola</div><div class="tavola-header-title">Confirmar Pix</div></div>
+<div class="tavola-body">
+<div class="tavola-section-label">Valor</div>
+<div class="tavola-amount-display"><span class="tavola-amount-currency">R$</span><span class="tavola-amount-value">8.500,00</span></div>
+<div class="tavola-section-label">Para</div>
+<div class="tavola-recipient"><div class="tavola-recipient-avatar">RA</div><div class="tavola-recipient-info"><div class="tavola-recipient-name">Roberto A. Souza</div><div class="tavola-recipient-detail">CPF ***.***.412-09 &middot; primeira vez</div></div></div>
+<div class="tavola-warning-banner"><div class="tavola-warning-icon">!</div><div class="tavola-warning-text"><strong>Atenção: padrão de golpe detectado</strong>Esta conta recebeu 9 transferências hoje e está reportada por 2 outros bancos nas últimas 2 horas. O valor é 25x maior que sua média.<br><br>Você está sendo pressionado por mensagem ou ligação para enviar este Pix?</div></div>
+<div style="flex:1"></div>
+<div class="tavola-cta-btn" style="background:#fff;border:1.5px solid var(--tavola-green);color:var(--tavola-green)">Cancelar e proteger minha conta</div>
+<div class="tavola-cta-btn" style="background:#fff;border:1.5px solid #BBB;color:#666;font-size:11px;padding:10px">Confirmar com biometria assim mesmo</div>
+</div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">R$ 0</div><div class="outcome-metric-label">Loss avoided</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">61%</div><div class="outcome-metric-label">Cancel rate at warning</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">+12yr</div><div class="outcome-metric-label">Customer trust extended</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under eighty milliseconds. Every Pix decision sharper.</div><div class="stage-subtitle">Every component you just saw running together. Core banking, customer master, ML platform, event stream, and the regulatory feed all converge in Redis. Redis decides. The Pix authorization channel acts. The result is loss avoidance at scale, customer trust preserved, and BCB compliance on day one of MED 2.0.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Core Banking System</h4><p>Account 360 / balances</p></div>
+<div class="arch-node"><h4>Customer Master Database</h4><p>Customer master / KYC</p></div>
+<div class="arch-node"><h4>ML Platform</h4><p>Fraud ML / graph features</p></div>
+<div class="arch-node"><h4>Event Streaming Platform</h4><p>SPI events / device telemetry</p></div>
+<div class="arch-node"><h4>Regulatory + Industry Feeds</h4><p>BCB DICT, Resolution 6, MED stream</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, core banking and customer data into Redis with no application rewrite</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>Feature pipeline orchestration, train/serve parity</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Operational 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live session and device state</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 24-month transaction history, mule graph</p></div>
+<div class="arch-node"><h4>Featureform on Redis</h4><p>Feature store, online serving, identical to training</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">JSON Profiles</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Streams</div>
+<div class="arch-data-chip">Vectors</div>
+<div class="arch-data-chip">Graph</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Policy</h4><p>Velocity, BCB compliance, MED hooks</p></div>
+<div class="arch-node"><h4>ML Fraud Scorer</h4><p>Gradient-boosted ensemble + GNN</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Mule similarity, scam pattern match</p></div>
+<div class="arch-node"><h4>LangCache</h4><p>GenAI in-app scam alert generation</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Pix Authorization</h4><p>Allow / friction / block at SPI</p></div>
+<div class="arch-node"><h4>Tavola App In-Flow Alert</h4><p>Smart friction + scam warning</p></div>
+<div class="arch-node"><h4>Step-Up Auth</h4><p>Biometric / token re-challenge</p></div>
+<div class="arch-node"><h4>Industry Signal Share</h4><p>BCB Resolution 6 + DICT update</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Event stream &rarr; ML platform GNN retraining &rarr; Updated mule graph + scam vectors &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Decision Latency (P99)</div><div class="arch-callout-value teal">78 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Smart Friction Cancel Rate</div><div class="arch-callout-value orange">61% on high-risk</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Annualized Loss Avoidance</div><div class="arch-callout-value amber">R$ 487M &rarr; R$ 1.2B</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<80ms','0.2ms','1.4ms','2.8ms','5.1ms','7.2ms','7.6ms','7.8ms','7.8ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
