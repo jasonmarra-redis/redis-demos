@@ -229,7 +229,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
 <div class="stage-content active" id="stage0">
-<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Banco Tavola's Real-Time Pix Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Tavola's source systems feed Redis. Redis decides. The Pix authorization channel acts. Every Pix transaction passes through this architecture in under 80 milliseconds, well inside the BCB 100ms SLA.</div></div>
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Banco Tavola's Real-Time Pix Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Tavola's source systems feed Redis. Redis decides. The Pix authorization channel acts. Every Pix transaction passes through this architecture in under 80 milliseconds, well inside the BCB 100ms SLA.</div><div style="margin-top:18px;padding:14px 18px;border-radius:10px;background:linear-gradient(90deg,rgba(167,139,250,.08),rgba(0,201,167,.05));border:1px solid rgba(167,139,250,.2);display:flex;align-items:center;gap:14px"><div style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--purple);padding:4px 10px;border-radius:5px;background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.25);white-space:nowrap">REDIS CONTEXT SURFACES</div><div style="font-size:13px;color:var(--text2);line-height:1.5">The framing layer for the demo. Redis assembles the right context from five disparate systems and hands it to the decision engine in under 10 milliseconds. Every capability you see in this demo is a surface on top of that single primitive.</div></div></div>
 <div class="arch-wrap">
 <div class="arch-frame">
 
@@ -246,7 +246,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
 <div class="arch-tier-row">
-<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, core banking and customer data into Redis with no application rewrite</p></div>
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from core banking + customer master, no application rewrite</p></div>
+<div class="arch-node"><h4>Redis Streams</h4><p>12,000 Pix events/sec, consumer lag &lt; 1 ms</p></div>
 <div class="arch-node"><h4>Featureform</h4><p>Feature pipeline orchestration, train/serve parity</p></div>
 </div></div>
 
@@ -254,9 +255,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Operational 360)</div>
 <div class="arch-tier-row">
-<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live session and device state</p></div>
-<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 24-month transaction history, mule graph</p></div>
-<div class="arch-node"><h4>Featureform on Redis</h4><p>Feature store, online serving, identical to training</p></div>
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live session + device state</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 24-month history, mule graph</p></div>
+<div class="arch-node"><h4>Real-Time Feature Store</h4><p>Featureform on Redis, train/serve parity</p></div>
+<div class="arch-node"><h4>Active-Active</h4><p>SP / RJ / BSB regions, 99.999% SLA</p></div>
 </div>
 <div class="arch-data-strip">
 <div class="arch-data-chip">JSON Profiles</div>
@@ -272,8 +274,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="arch-tier-row">
 <div class="arch-node"><h4>Rules / Policy</h4><p>Velocity, BCB compliance, MED hooks</p></div>
 <div class="arch-node"><h4>ML Fraud Scorer</h4><p>Gradient-boosted ensemble + GNN</p></div>
-<div class="arch-node"><h4>Vector Search</h4><p>Mule similarity, scam pattern match</p></div>
-<div class="arch-node"><h4>LangCache</h4><p>GenAI in-app scam alert generation</p></div>
+<div class="arch-node"><h4>Vector Database</h4><p>Scam typology embeddings</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Vector + filter + graph in one query</p></div>
 </div></div>
 
 <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
@@ -290,9 +292,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 </div>
 <div class="arch-callouts">
-<div class="arch-callout"><div class="arch-callout-label">End-to-End Decision Latency</div><div class="arch-callout-value teal">&lt;80 ms (P99)</div></div>
-<div class="arch-callout"><div class="arch-callout-label">Pix Decisions Per Second</div><div class="arch-callout-value orange">12,000 sustained</div></div>
-<div class="arch-callout"><div class="arch-callout-label">Annual MED Loss Avoidance</div><div class="arch-callout-value amber">R$ 1.2B target</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Decision Latency (P99)</div><div class="arch-callout-value teal">&lt;80 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Active-Active Regions</div><div class="arch-callout-value orange">SP / RJ / BSB &middot; 99.999%</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Annual Loss Avoidance Target</div><div class="arch-callout-value amber">R$ 1.2B</div></div>
 </div>
 </div>
 </div>
@@ -323,14 +325,14 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 3: INGEST ══ -->
 <div class="stage-content" id="stage2">
-<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Tavola's source systems flow into Redis</div><div class="stage-subtitle">RDI streams change data from the core banking and customer master systems without a rewrite. Featureform orchestrates feature delivery from the ML platform and event stream. Five sources converge into one sub-millisecond context tier.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span></div>
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Tavola's source systems flow into Redis</div><div class="stage-subtitle">RDI streams change data from the core banking and customer master systems without a rewrite. Featureform orchestrates feature delivery from the ML platform and event stream. Five sources converge into one sub-millisecond context tier.</div><span class="component-tag">Redis Streams</span><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span></div>
 <div class="viz-area">
 <div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
 <div class="flow-container">
 <div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#4F8CFF">CBS</div><div><div class="flow-source">Core Banking System &middot; Account Core</div><div class="flow-detail">Balances | Daily Pix limits | Account standing | 41M active accounts | CDC via RDI</div></div><div class="flow-arrow">&rarr;</div></div>
 <div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">CMD</div><div><div class="flow-source">Customer Master Database</div><div class="flow-detail">KYC | Demographics | Device registry | Beneficiary history | CDC via RDI</div></div><div class="flow-arrow">&rarr;</div></div>
 <div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:#FF3621">MLP</div><div><div class="flow-source">ML Platform &middot; Fraud Models + Graph</div><div class="flow-detail">Mule account graph | Scam pattern embeddings | Behavioral baselines | Refreshed every 15 min</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">EVT</div><div><div class="flow-source">Event Streaming Platform</div><div class="flow-detail">Pix events from BCB SPI | App session telemetry | Geolocation | Biometric signals</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">EVT</div><div><div class="flow-source">Event Streaming Platform &rarr; Redis Streams</div><div class="flow-detail">Pix events from BCB SPI | App session telemetry | 12,000 events/sec sustained | Consumer lag &lt;1 ms</div></div><div class="flow-arrow">&rarr;</div></div>
 <div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">REG</div><div><div class="flow-source">Regulatory + Industry Feeds</div><div class="flow-detail">Industry-shared fraud accounts | DICT key reputation | MED notification stream</div></div><div class="flow-arrow">&rarr;</div></div>
 </div></div>
 <div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
@@ -346,7 +348,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
 <div class="stage-content" id="stage3">
-<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Carla's customer 360 + the recipient's live signals</div><div class="stage-subtitle">Redis assembles the full picture in a single round trip. Carla's 24-month behavioral baseline on the left, the recipient account's last six hours on the right. The fraud pattern only becomes visible when both are in one place.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span></div>
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Carla's customer 360 + the recipient's live signals</div><div class="stage-subtitle">Redis assembles the full picture in a single round trip. Carla's 24-month behavioral baseline on the left, the recipient account's last six hours on the right. The fraud pattern only becomes visible when both are in one place.</div><span class="component-tag">Redis Context Surfaces</span><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span></div>
 <div class="viz-area">
 <div class="viz-panel"><div class="viz-panel-title">Customer 360 &middot; Carla (Sender)</div>
 <div class="data-rows">
@@ -374,7 +376,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 5: FEATURE SERVING ══ -->
 <div class="stage-content" id="stage4">
-<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the fraud scorer</div><div class="stage-subtitle">Featureform pulls every feature the ensemble needs into one vector. Sender features, recipient features, device features, and graph features merge in sub-millisecond. No feature lookups during scoring, no train/serve skew.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Feature Store</span></div>
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the fraud scorer</div><div class="stage-subtitle">Featureform pulls every feature the ensemble needs into one vector. Sender features, recipient features, device features, and graph features merge in sub-millisecond. No feature lookups during scoring, no train/serve skew.</div><span class="component-tag">Real-Time Feature Store</span><span class="component-tag">Vector Database</span><span class="component-tag">Featureform</span></div>
 <div class="viz-area" style="flex-direction:column;gap:18px">
 <div class="feat-grid">
 <div class="feat-card"><div class="feat-name">SENDER_AMOUNT_ZSCORE</div><div class="feat-desc">Pix amount as standard deviations above sender's 24-month rolling mean</div><div class="feat-value-row"><span class="feat-value">+11.4 σ</span><span class="feat-latency">0.4 ms</span></div></div>
@@ -397,8 +399,16 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 6: DECISION (RANKING) ══ -->
 <div class="stage-content" id="stage5">
-<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Decision</div><div class="stage-title">Three candidate actions, scored in real time</div><div class="stage-subtitle">The ML ensemble scores three possible outcomes: allow, friction, or block. Rules layer applies BCB compliance and customer-impact suppression. The winner balances loss avoidance against false-positive cost.</div><span class="component-tag">ML Fraud Scorer</span><span class="component-tag">Vector Search</span><span class="component-tag">Rules Engine</span></div>
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Decision</div><div class="stage-title">Three candidate actions, scored in real time</div><div class="stage-subtitle">The ML ensemble scores three possible outcomes: allow, friction, or block. Rules layer applies BCB compliance and customer-impact suppression. The winner balances loss avoidance against false-positive cost.</div><span class="component-tag">Hybrid Search</span><span class="component-tag">Vector Database</span><span class="component-tag">ML Fraud Scorer</span><span class="component-tag">Rules Engine</span></div>
 <div class="viz-area" style="flex-direction:column;gap:20px">
+<div class="viz-panel" style="margin-bottom:6px"><div class="viz-panel-title">Hybrid Search &middot; Mule Account Lookup (single Redis query, 2.4 ms)</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:6px">
+<div style="padding:14px;border-radius:8px;background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.15)"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--purple);letter-spacing:1px;margin-bottom:6px">VECTOR SIMILARITY</div><div style="font-size:12px;color:var(--text2);line-height:1.5">Recipient account behavior embedding vs. known mule cluster centroids. Cosine 0.89.</div></div>
+<div style="padding:14px;border-radius:8px;background:rgba(79,140,255,.05);border:1px solid rgba(79,140,255,.15)"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--blue);letter-spacing:1px;margin-bottom:6px">STRUCTURED FILTERS</div><div style="font-size:12px;color:var(--text2);line-height:1.5">account_age &lt; 90d AND account_type = PJ_T3 AND passthrough_ratio &gt; 0.9</div></div>
+<div style="padding:14px;border-radius:8px;background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)"><div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--teal);letter-spacing:1px;margin-bottom:6px">RESULT</div><div style="font-size:12px;color:var(--text2);line-height:1.5">2-hop mule graph proximity to confirmed fraud cluster. Match.</div></div>
+</div>
+<div style="margin-top:14px;padding:11px 14px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.5"><strong style="color:var(--text2)">Why this matters:</strong> Vector + filter + graph traversal in one Redis query. No Pinecone for the embedding, no Postgres for the filter, no Neo4j for the graph. One database, 2.4 ms, every Pix.</div>
+</div>
 <div style="display:flex;gap:10px;flex-wrap:wrap">
 <div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">Fraud score: 0.94 / 1.00</div>
 <div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">Sender Z-score breach: amount &gt; 11σ</div>
@@ -491,7 +501,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
 <div class="stage-content" id="stage8">
-<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under eighty milliseconds. Every Pix decision sharper.</div><div class="stage-subtitle">Every component you just saw running together. Core banking, customer master, ML platform, event stream, and the regulatory feed all converge in Redis. Redis decides. The Pix authorization channel acts. The result is loss avoidance at scale, customer trust preserved, and BCB compliance on day one of MED 2.0.</div></div>
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under eighty milliseconds. Every Pix decision sharper.</div><div class="stage-subtitle">Every component you just saw running together. Core banking, customer master, ML platform, event stream, and the regulatory feed all converge in Redis. Redis decides. The Pix authorization channel acts. Six Redis capabilities, one operational tier, four economic levers protected: avoided fraud loss, MED reimbursement burden, false-positive cost, and Prime customer LTV.</div></div>
 <div class="arch-wrap">
 <div class="arch-frame">
 
@@ -508,7 +518,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
 <div class="arch-tier-row">
-<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, core banking and customer data into Redis with no application rewrite</p></div>
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from core banking + customer master, no application rewrite</p></div>
+<div class="arch-node"><h4>Redis Streams</h4><p>12,000 Pix events/sec, consumer lag &lt; 1 ms</p></div>
 <div class="arch-node"><h4>Featureform</h4><p>Feature pipeline orchestration, train/serve parity</p></div>
 </div></div>
 
@@ -516,9 +527,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 
 <div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Operational 360)</div>
 <div class="arch-tier-row">
-<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live session and device state</p></div>
-<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 24-month transaction history, mule graph</p></div>
-<div class="arch-node"><h4>Featureform on Redis</h4><p>Feature store, online serving, identical to training</p></div>
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live session + device state</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 24-month history, mule graph</p></div>
+<div class="arch-node"><h4>Real-Time Feature Store</h4><p>Featureform on Redis, train/serve parity</p></div>
+<div class="arch-node"><h4>Active-Active</h4><p>SP / RJ / BSB regions, 99.999% SLA</p></div>
 </div>
 <div class="arch-data-strip">
 <div class="arch-data-chip">JSON Profiles</div>
@@ -534,8 +546,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="arch-tier-row">
 <div class="arch-node"><h4>Rules / Policy</h4><p>Velocity, BCB compliance, MED hooks</p></div>
 <div class="arch-node"><h4>ML Fraud Scorer</h4><p>Gradient-boosted ensemble + GNN</p></div>
-<div class="arch-node"><h4>Vector Search</h4><p>Mule similarity, scam pattern match</p></div>
-<div class="arch-node"><h4>LangCache</h4><p>GenAI in-app scam alert generation</p></div>
+<div class="arch-node"><h4>Vector Database</h4><p>Scam typology embeddings</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Vector + filter + graph in one query</p></div>
 </div></div>
 
 <div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
@@ -555,6 +567,17 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:h
 <div class="arch-callout"><div class="arch-callout-label">Decision Latency (P99)</div><div class="arch-callout-value teal">78 ms</div></div>
 <div class="arch-callout"><div class="arch-callout-label">Smart Friction Cancel Rate</div><div class="arch-callout-value orange">61% on high-risk</div></div>
 <div class="arch-callout"><div class="arch-callout-label">Annualized Loss Avoidance</div><div class="arch-callout-value amber">R$ 487M &rarr; R$ 1.2B</div></div>
+</div>
+<div style="margin-top:18px;padding:20px 24px;border-radius:14px;background:linear-gradient(135deg,rgba(220,56,44,.06),rgba(167,139,250,.04));border:1px solid rgba(220,56,44,.18)">
+<div style="font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--red);margin-bottom:14px;text-transform:uppercase">Six Redis Capabilities &middot; One Operational Tier</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+<div style="padding:12px 14px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Redis Context Surfaces</div><div style="font-size:11px;color:var(--text3);line-height:1.5">The framing layer. Five sources assembled into one context package per Pix.</div></div>
+<div style="padding:12px 14px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Real-Time Feature Store</div><div style="font-size:11px;color:var(--text3);line-height:1.5">186 features hydrated in 2.1 ms. Train/serve parity. Identical to model training.</div></div>
+<div style="padding:12px 14px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Vector Database</div><div style="font-size:11px;color:var(--text3);line-height:1.5">Scam typology embeddings. Pattern-match scams, do not rule-match them.</div></div>
+<div style="padding:12px 14px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Hybrid Search</div><div style="font-size:11px;color:var(--text3);line-height:1.5">Vector + filter + graph in one query. Replaces 2-3 separate systems.</div></div>
+<div style="padding:12px 14px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Redis Streams</div><div style="font-size:11px;color:var(--text3);line-height:1.5">12,000 Pix events/sec from BCB SPI. Consumer lag under 1 ms.</div></div>
+<div style="padding:12px 14px;border-radius:9px;background:rgba(255,255,255,.03);border:1px solid var(--border)"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">Active-Active Geo</div><div style="font-size:11px;color:var(--text3);line-height:1.5">SP, RJ, BSB regions. 99.999% SLA. Survives a full regional outage.</div></div>
+</div>
 </div>
 </div>
 </div>
