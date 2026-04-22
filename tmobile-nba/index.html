@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | T-Mobile Next Best Action</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+  --tmo-magenta:#E20074;--tmo-magenta-dim:#B8005C;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:820px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}.data-row:nth-child(8){animation-delay:.66s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}.data-value.magenta{color:var(--tmo-magenta)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:46px;height:46px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px;text-align:center;line-height:1.1;padding:4px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.viewer-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.viewer-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--tmo-magenta),var(--tmo-magenta-dim));display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.viewer-name{font-size:17px;font-weight:700}.viewer-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.viewer-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(226,0,116,.12);color:var(--tmo-magenta);border:1px solid rgba(226,0,116,.25)}
+.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.content-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.content-card.suppressed{opacity:.55}
+.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.content-card.winner .content-rank{color:var(--teal)}
+.content-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.content-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px;background:rgba(226,0,116,.14);color:var(--tmo-magenta)}
+.content-suppressed-tag{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px;background:rgba(255,255,255,.06);color:var(--text3)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+/* ── ARCHITECTURE ── */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.7);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+.arch-callout-value.magenta{color:var(--tmo-magenta)}
+/* Feature serving */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Care-center expert desktop mockup */
+.expert-screen{background:#0E0E12;border-radius:14px;border:1px solid rgba(255,255,255,.06);overflow:hidden;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.expert-head{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02)}
+.expert-logo{font-size:14px;font-weight:800;color:var(--tmo-magenta);letter-spacing:1px}
+.generic-head .expert-logo{color:var(--text3) !important}
+.expert-meta{font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.5px}
+.expert-body{padding:18px}
+.expert-cust{display:flex;gap:12px;align-items:center;padding:12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:14px}
+.expert-cust-av{width:40px;height:40px;border-radius:8px;background:linear-gradient(135deg,var(--tmo-magenta),var(--tmo-magenta-dim));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.generic-head + .expert-body .expert-cust-av{background:#2a2a2a}
+.expert-cust-name{font-size:13px;font-weight:700}
+.expert-cust-sub{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+.expert-section-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);font-family:var(--mono);margin-bottom:8px;margin-top:6px}
+.expert-offer{padding:12px;border-radius:8px;background:rgba(226,0,116,.06);border:1px solid rgba(226,0,116,.2);margin-bottom:8px}
+.generic-head + .expert-body .expert-offer{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.expert-offer-title{font-size:13px;font-weight:700;margin-bottom:4px}
+.expert-offer-desc{font-size:11px;color:var(--text2);line-height:1.45;margin-bottom:8px}
+.expert-offer-meta{display:flex;gap:12px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.expert-offer-meta b.magenta{color:var(--tmo-magenta)}
+.expert-offer-meta b.teal{color:var(--teal)}
+.expert-script{padding:10px 12px;border-radius:6px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.04);font-size:11px;color:var(--text2);font-style:italic;line-height:1.5;margin-top:10px}
+.expert-latency-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:5px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:10px;font-weight:700;color:var(--teal)}
+.expert-latency-chip.stale{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2);color:var(--red)}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+/* Flex storage bar viz */
+.flex-bar-wrap{padding:18px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-top:14px}
+.flex-bar-title{font-size:12px;font-weight:700;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;font-family:var(--mono);margin-bottom:12px}
+.flex-bar{display:flex;height:32px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.flex-bar-seg{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:#fff;padding:0 10px}
+.flex-bar-legend{display:flex;gap:20px;margin-top:10px;flex-wrap:wrap}
+.flex-legend-item{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);font-family:var(--mono)}
+.flex-legend-dot{width:10px;height:10px;border-radius:2px}
+/* Active-active map callout */
+.aa-wrap{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.aa-region{padding:12px;border-radius:8px;background:rgba(0,201,167,.04);border:1px solid rgba(0,201,167,.15)}
+.aa-region-label{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--teal);letter-spacing:1px;margin-bottom:6px}
+.aa-region-val{font-size:13px;font-weight:700;color:var(--text)}
+.aa-region-sub{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:4px}
+/* Nav */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.aa-wrap{grid-template-columns:1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | T-Mobile Next Best Action</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Decision</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Call Trigger</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Ranking</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Retention Economics</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">T-Mobile's Next Best Action Stack on Redis</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Cassandra, Postgres, and Databricks feed Redis through RDI and Featureform. Redis decides in under 10 milliseconds. T-Life, care, web, mobile, and SMS all render the same decision. This architecture replaces Pega ADP entirely and closes the 300-to-900 millisecond latency gap that cannot be tuned away.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Cassandra</h4><p>Interaction history</p></div>
+<div class="arch-node"><h4>Postgres</h4><p>Customer / line tables</p></div>
+<div class="arch-node"><h4>Databricks</h4><p>Offline ML feature store</p></div>
+<div class="arch-node"><h4>EventHub / Kafka</h4><p>Live signal stream</p></div>
+<div class="arch-node"><h4>Network Telemetry</h4><p>Coverage, diagnostics</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from Cassandra and Postgres, sub-second sync, proactive staging</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>Feature engineering, train-serve parity, online-online handoff</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (8TB Unified Memory)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Flex 8TB</h4><p>Full IH, customer/line, DDS, feature store, embeddings</p></div>
+<div class="arch-node"><h4>Active-Active</h4><p>us-east-1 + us-west-2, CRDT sync, zero data loss</p></div>
+<div class="arch-node"><h4>Vector Index</h4><p>User and offer embeddings, semantic matching</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">IH 582GB</div>
+<div class="arch-data-chip">DDS 435GB</div>
+<div class="arch-data-chip">Customer 295GB</div>
+<div class="arch-data-chip">Features + Embeddings 4-5TB</div>
+<div class="arch-data-chip">Aggregates 72GB</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine (Replaces Pega ADP)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Eligibility</h4><p>Frequency caps, offer catalog, compliance</p></div>
+<div class="arch-node"><h4>ML Ranker</h4><p>Propensity + LTV weighting</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>User-offer semantic match</p></div>
+<div class="arch-node"><h4>Policy Arbitration</h4><p>Attribution-aware action selection</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>T-Life App</h4><p>In-app offers, device, billing</p></div>
+<div class="arch-node"><h4>Care Desktop</h4><p>Expert NBA panel</p></div>
+<div class="arch-node"><h4>Web + Retail</h4><p>T-Mobile.com + store POS</p></div>
+<div class="arch-node"><h4>SMS / Push / Email</h4><p>Proactive outbound</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision logs &rarr; Kafka &rarr; Databricks retraining &rarr; Updated policy &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Target End-to-End Latency</div><div class="arch-callout-value teal">&lt;10 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Replaces Pega ADP</div><div class="arch-callout-value orange">300-900 ms &rarr; &lt;10 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Availability SLA</div><div class="arch-callout-value amber">99.999%</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: CALL TRIGGER ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Call Trigger</div><div class="stage-title">Alina calls into a Team of Experts</div><div class="stage-subtitle">A high-value Magenta MAX customer with a multi-line account opens a care session. The moment the call lands, the expert's desktop fires a decision request. Redis has roughly ten milliseconds to return a decision before the screen renders. Today on Pega ADP, the decision returns in 420 milliseconds and the expert gets a stale, generic script.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Care Session Event</div>
+<div class="viewer-card"><div class="viewer-avatar">AR</div><div><div class="viewer-name">Alina Rivera</div><div class="viewer-detail">Magenta MAX | 4 lines | Customer since 2015 | Household ARPU $185</div></div><div class="viewer-badge">TIER: HIGH-VALUE</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">care_session_start</span></div>
+<div class="data-row"><span class="data-label">Channel</span><span class="data-value orange">Voice &rarr; Team of Experts queue</span></div>
+<div class="data-row"><span class="data-label">Customer tenure</span><span class="data-value">11 years 2 months</span></div>
+<div class="data-row"><span class="data-label">Lines on account</span><span class="data-value amber">4 active, 1 watch device</span></div>
+<div class="data-row"><span class="data-label">Home address</span><span class="data-value">Plano, TX (5G UC coverage confirmed)</span></div>
+<div class="data-row"><span class="data-label">Network signal last 7 days</span><span class="data-value red">2 dropped calls, RSRP -112 dBm indoor</span></div>
+<div class="data-row"><span class="data-label">Open care flags</span><span class="data-value red">"Signal issues" tagged from last session</span></div>
+<div class="data-row"><span class="data-label">HSI (Home Internet)</span><span class="data-value teal">Eligible, not attached</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Call Matters</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Alina is in the <strong style="color:var(--tmo-magenta)">top decile of household ARPU</strong>. An 11-year tenure with 4 lines is the kind of relationship that compounds for another decade, or unwinds in a single bad call.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Her network signal data already flags a <strong style="color:var(--red)">coverage problem at home</strong>. She is calling right now because of it. The expert needs to see that on the first screen, not surface it after a three-minute diagnostic.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(226,0,116,.06);border:1px solid rgba(226,0,116,.2);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--tmo-magenta)">The opportunity:</strong> Lead with a signal booster at zero cost, layer Home Internet on top (her address is UC-eligible), and convert a retention risk into an expansion event. All of this has to be decided before the expert says hello.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">On Pega ADP today:</strong> 420 ms decision returns after the expert screen loads. Script reads "we value your business." No network context, no HSI propensity, no attribution loop. Alina hangs up with a credit on her account and a still-broken indoor signal.</div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">T-Mobile's data sources flow into Redis</div><div class="stage-subtitle">Cassandra holds the full interaction history. Postgres runs customer and line state. Databricks trains the offline feature store. Kafka carries live signals from network telemetry and care events. RDI handles change capture. Featureform orchestrates features. What was fragmented across six systems and refreshed overnight is now unified in Redis with sub-second recency.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:1.2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.15);color:var(--blue)">CASS</div><div><div class="flow-source">Cassandra</div><div class="flow-detail">Interaction History &middot; 582 GB full corpus</div></div><span class="flow-arrow">&rarr;</span></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.15);color:var(--blue)">PG</div><div><div class="flow-source">Postgres</div><div class="flow-detail">Customer + line tables &middot; 295 GB, DDS 435 GB</div></div><span class="flow-arrow">&rarr;</span></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.15);color:var(--red)">DBX</div><div><div class="flow-source">Databricks</div><div class="flow-detail">Offline feature store &middot; churn, propensity, LTV</div></div><span class="flow-arrow">&rarr;</span></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,188,87,.15);color:var(--amber)">KFK</div><div><div class="flow-source">EventHub / Kafka</div><div class="flow-detail">Live care events, T-Life taps, CCPA consents</div></div><span class="flow-arrow">&rarr;</span></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.15);color:var(--purple)">NET</div><div><div class="flow-source">Network Telemetry</div><div class="flow-detail">Cell-site diagnostics, indoor coverage scoring</div></div><span class="flow-arrow">&rarr;</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Pipeline Health</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">RDI change lag (Cassandra)</span><span class="data-value teal">0.4 s</span></div>
+<div class="data-row"><span class="data-label">RDI change lag (Postgres)</span><span class="data-value teal">0.3 s</span></div>
+<div class="data-row"><span class="data-label">Featureform freshness (Databricks)</span><span class="data-value teal">&lt; 1 s online handoff</span></div>
+<div class="data-row"><span class="data-label">Kafka live-signal delivery</span><span class="data-value teal">&lt; 1 ms</span></div>
+<div class="data-row"><span class="data-label">Daily change volume</span><span class="data-value">~1.8 B records</span></div>
+<div class="data-row"><span class="data-label">Cold-start cache misses</span><span class="data-value teal">0 (proactive staging)</span></div>
+<div class="data-row"><span class="data-label">Training-serving skew</span><span class="data-value teal">Eliminated (same feature spec)</span></div>
+</div>
+<div style="margin-top:18px;padding:14px;border-radius:8px;background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2);font-size:12px;color:var(--text2);line-height:1.55">
+<strong style="color:var(--teal)">Cassandra, Postgres, and Databricks stay in place.</strong> RDI and Featureform sit on top as the ingest layer. Redis becomes operational, not a replacement for the systems of record.
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Historical profile meets live signal</div><div class="stage-subtitle">Personalizing for Alina is not just her history. It is her history crossed with what is happening right now. Redis assembles both sides in a single sub-10ms context call. Full 11-year interaction history on the left. This week's network signal, today's care flag, the last tap in T-Life, on the right.</div></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Historical Profile (Cassandra + Postgres via RDI)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Plan</span><span class="data-value magenta">Magenta MAX, 4 lines + 1 watch</span></div>
+<div class="data-row"><span class="data-label">Household ARPU</span><span class="data-value amber">$185 / mo (top decile)</span></div>
+<div class="data-row"><span class="data-label">Tenure</span><span class="data-value">11 yr 2 mo &middot; 0 voluntary churns</span></div>
+<div class="data-row"><span class="data-label">Prior retention saves</span><span class="data-value">2 (2019 upgrade, 2022 family add)</span></div>
+<div class="data-row"><span class="data-label">Device upgrade window</span><span class="data-value teal">Open &middot; 2 of 4 lines eligible</span></div>
+<div class="data-row"><span class="data-label">Home Internet (HSI)</span><span class="data-value teal">Eligible, not attached &middot; UC-confirmed</span></div>
+<div class="data-row"><span class="data-label">NPS (last 90 days)</span><span class="data-value amber">7 (neutral, trending down)</span></div>
+<div class="data-row"><span class="data-label">Preferred channel</span><span class="data-value">Voice + T-Life app</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Live Signal (Kafka + Network Telemetry)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Session start</span><span class="data-value">2 seconds ago</span></div>
+<div class="data-row"><span class="data-label">Network events, last 7 days</span><span class="data-value red">2 dropped calls at home address</span></div>
+<div class="data-row"><span class="data-label">Indoor RSRP (home)</span><span class="data-value red">-112 dBm (weak)</span></div>
+<div class="data-row"><span class="data-label">Outdoor RSRP (home block)</span><span class="data-value teal">-82 dBm (strong, 5G UC)</span></div>
+<div class="data-row"><span class="data-label">Cell-site diagnostic</span><span class="data-value">Indoor penetration issue, not outage</span></div>
+<div class="data-row"><span class="data-label">T-Life last 24h</span><span class="data-value">Opened app 3x, viewed "coverage map" twice</span></div>
+<div class="data-row"><span class="data-label">Inferred intent</span><span class="data-value magenta">Signal complaint &middot; possible retention risk</span></div>
+<div class="data-row"><span class="data-label">Competitor exposure</span><span class="data-value amber">Verizon home-5G ad seen 4x (MMP)</span></div>
+</div>
+<div style="margin-top:16px;padding:14px;border-radius:8px;background:rgba(226,0,116,.06);border:1px solid rgba(226,0,116,.2);font-size:12px;color:var(--text2);line-height:1.55">
+<strong style="color:var(--tmo-magenta)">Contextual intelligence:</strong> Alina has strong outdoor 5G UC at her address but weak indoor signal. That is a signal-booster problem, not a churn problem. And she is already HSI-eligible on the same UC node.
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Six features hydrated in under 2 milliseconds</div><div class="stage-subtitle">Featureform serves the online feature store from Redis Flex. Every feature used by the decision engine is retrieved in well under a millisecond, with the same definition used for offline training in Databricks. No training-serving skew. No cold starts. P90 equals P50 even at 5x peak traffic.</div><span class="component-tag">Real-Time Feature Store</span><span class="component-tag">Redis Flex (8TB)</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:1.4"><div class="viz-panel-title">Online Features for Decision Request</div>
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">churn_risk_30d</div><div class="feat-desc">Propensity to churn in the next 30 days given signal events and care flags</div><div class="feat-value-row"><span class="feat-value">0.71 (high)</span><span class="feat-latency">0.7 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">network_sentiment_score</div><div class="feat-desc">Rolling sentiment from support interactions and in-app coverage queries</div><div class="feat-value-row"><span class="feat-value">-0.42 (negative)</span><span class="feat-latency">0.6 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">uc_coverage_eligible</div><div class="feat-desc">5G UC coverage confirmed at primary address via network topology join</div><div class="feat-value-row"><span class="feat-value">TRUE</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">hsi_upsell_propensity</div><div class="feat-desc">Probability of Home Internet attach given household, usage, and coverage</div><div class="feat-value-row"><span class="feat-value">0.83 (high)</span><span class="feat-latency">0.8 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">tenure_ltv_score</div><div class="feat-desc">Weighted lifetime value given tenure, ARPU, and line velocity</div><div class="feat-value-row"><span class="feat-value">0.94 (top decile)</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">device_upgrade_window</div><div class="feat-desc">Open-window flag per line with refresh eligibility and financing capacity</div><div class="feat-value-row"><span class="feat-value">2 of 4 OPEN</span><span class="feat-latency">0.6 ms</span></div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Performance Panel</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Features served this request</span><span class="data-value">6 of 42 available</span></div>
+<div class="data-row"><span class="data-label">P50 feature latency</span><span class="data-value teal">0.6 ms</span></div>
+<div class="data-row"><span class="data-label">P90 feature latency</span><span class="data-value teal">0.9 ms</span></div>
+<div class="data-row"><span class="data-label">P99 feature latency</span><span class="data-value teal">1.4 ms</span></div>
+<div class="data-row"><span class="data-label">P90 &asymp; P50 under 5x surge</span><span class="data-value teal">Confirmed</span></div>
+<div class="data-row"><span class="data-label">Features per second (platform)</span><span class="data-value">2.4 M sustained</span></div>
+</div>
+<div class="flex-bar-wrap">
+<div class="flex-bar-title">Redis Flex Memory &middot; 8 TB Online Tier</div>
+<div class="flex-bar">
+<div class="flex-bar-seg" style="flex:0 0 7%;background:var(--tmo-magenta)">IH 582GB</div>
+<div class="flex-bar-seg" style="flex:0 0 5%;background:var(--red)">DDS 435G</div>
+<div class="flex-bar-seg" style="flex:0 0 4%;background:var(--orange)">Cust 295G</div>
+<div class="flex-bar-seg" style="flex:0 0 56%;background:var(--blue)">Features + Embeddings 4-5 TB</div>
+<div class="flex-bar-seg" style="flex:0 0 28%;background:rgba(255,255,255,.12);color:var(--text2)">Headroom</div>
+</div>
+<div class="flex-bar-legend">
+<div class="flex-legend-item"><div class="flex-legend-dot" style="background:var(--tmo-magenta)"></div>Interaction History</div>
+<div class="flex-legend-item"><div class="flex-legend-dot" style="background:var(--red)"></div>DDS Account + Line</div>
+<div class="flex-legend-item"><div class="flex-legend-dot" style="background:var(--orange)"></div>Customer / Line</div>
+<div class="flex-legend-item"><div class="flex-legend-dot" style="background:var(--blue)"></div>Feature Store + Embeddings</div>
+</div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: RANKING ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Ranking</div><div class="stage-title">Three candidate actions scored, winner arbitrated</div><div class="stage-subtitle">Vector search matches Alina's user embedding against the offer embedding corpus. Rules apply frequency caps, offer catalog state, and eligibility. Policy arbitration weights propensity against LTV impact. One candidate wins outright. One is bundled in. One is suppressed as a recent-repeat.</div><span class="component-tag">Vector Database</span><span class="component-tag">Real-Time Feature Store</span></div>
+<div class="content-grid">
+<div class="content-card winner">
+<div class="content-rank">Winner &middot; Bundle</div>
+<div class="content-source">SIGNAL BOOSTER + HSI</div>
+<div class="content-title">Free CellSpot + HSI 20% off 12 mo</div>
+<div class="content-meta">Ships free, self-install. Home Internet on same 5G UC node she already has outdoors.</div>
+<div class="score-bar"><div class="score-fill" style="--score:91%;background:var(--teal)"></div></div>
+<div class="score-label"><span>Propensity 0.91</span><span>LTV +$2,840</span></div>
+</div>
+<div class="content-card">
+<div class="content-rank">#2 Candidate</div>
+<div class="content-source">DEVICE UPGRADE</div>
+<div class="content-title">iPhone upgrade, 2 lines eligible</div>
+<div class="content-meta">Device upgrade window open. Held back: does not address the root call reason.</div>
+<div class="score-bar"><div class="score-fill" style="--score:64%;background:var(--amber)"></div></div>
+<div class="score-label"><span>Propensity 0.64</span><span>LTV +$820</span></div>
+</div>
+<div class="content-card suppressed">
+<div class="content-rank">Suppressed</div>
+<div class="content-suppressed-tag">FREQ CAP &middot; RECENT</div>
+<div class="content-title">Line add promo (BOGO)</div>
+<div class="content-meta">Suppressed: household added a line in 2022, frequency cap and relevance both fail.</div>
+<div class="score-bar"><div class="score-fill" style="--score:28%;background:var(--text3)"></div></div>
+<div class="score-label"><span>Propensity 0.28</span><span>Suppressed</span></div>
+</div>
+</div>
+<div style="margin-top:20px;padding:18px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+<div><div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px">VECTOR MATCH</div><div style="font-size:13px;color:var(--text)">Cosine sim 0.89 vs. offer embedding space of 1,240 active NBAs</div></div>
+<div><div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px">RULES APPLIED</div><div style="font-size:13px;color:var(--text)">Frequency cap, offer inventory, compliance, channel</div></div>
+<div><div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px">ARBITRATION</div><div style="font-size:13px;color:var(--text)">Weighted propensity &times; LTV &times; call-reason alignment</div></div>
+<div><div style="font-family:var(--mono);font-size:10px;letter-spacing:1px;color:var(--text3);margin-bottom:4px">RANKING LATENCY</div><div style="font-size:13px;color:var(--teal)">3.1 ms (includes vector search)</div></div>
+</div></div>
+
+<!-- ══ STAGE 7: RETENTION ECONOMICS ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Retention Economics</div><div class="stage-title">The math on one call, scaled to the base</div><div class="stage-subtitle">One NBA decision on one call. But the composition of that decision is what changes the economics. A generic retention save is a credit and a chance. A network-aware bundle is a resolution plus an expansion. One protects revenue. The other grows it.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:1.3"><div class="viz-panel-title">This Call &mdash; Generic vs. Redis NBA</div>
+<div class="rev-compare">
+<div class="rev-card before">
+<div class="rev-value" style="color:var(--text3)">31%</div>
+<div class="rev-label">Save probability &middot; generic retention</div>
+</div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after">
+<div class="rev-value" style="color:var(--teal)">94%</div>
+<div class="rev-label">Save probability &middot; network-aware bundle</div>
+</div>
+</div>
+<div class="data-rows" style="margin-top:22px">
+<div class="data-row"><span class="data-label">Incremental LTV from HSI attach (36 mo)</span><span class="data-value teal">+$2,840</span></div>
+<div class="data-row"><span class="data-label">Avoided churn cost (4-line household)</span><span class="data-value teal">+$1,120</span></div>
+<div class="data-row"><span class="data-label">Booster cost (to T-Mobile)</span><span class="data-value red">-$40</span></div>
+<div class="data-row"><span class="data-label">Expert talk-time saved</span><span class="data-value amber">-90 sec (no generic diagnostic)</span></div>
+<div class="data-row"><span class="data-label">Net value, this call</span><span class="data-value teal">+$3,920</span></div>
+</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Scaled &mdash; Care Center, Annualized</div>
+<div style="display:flex;flex-direction:column;gap:14px;margin-top:4px">
+<div style="padding:16px;border-radius:10px;background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)">
+<div style="font-family:var(--mono);font-size:10px;color:var(--teal);letter-spacing:1px;margin-bottom:6px">NETWORK-DRIVEN RETENTION CALLS</div>
+<div style="font-size:20px;font-weight:700">~1.2M / year</div>
+<div style="font-size:11px;color:var(--text3);margin-top:4px;font-family:var(--mono)">industry benchmark for carriers at TMUS scale</div>
+</div>
+<div style="padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.2)">
+<div style="font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:1px;margin-bottom:6px">SAVE-RATE LIFT</div>
+<div style="font-size:20px;font-weight:700">+18 to +24 pts</div>
+<div style="font-size:11px;color:var(--text3);margin-top:4px;font-family:var(--mono)">network-aware vs. generic retention</div>
+</div>
+<div style="padding:16px;border-radius:10px;background:rgba(226,0,116,.06);border:1px solid rgba(226,0,116,.2)">
+<div style="font-family:var(--mono);font-size:10px;color:var(--tmo-magenta);letter-spacing:1px;margin-bottom:6px">HSI ATTACH LIFT (NETWORK-AWARE)</div>
+<div style="font-size:20px;font-weight:700">+$180 - $260 M</div>
+<div style="font-size:11px;color:var(--text3);margin-top:4px;font-family:var(--mono)">incremental, first-year run-rate, care-channel only</div>
+</div>
+<div style="padding:12px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:11px;color:var(--text3);line-height:1.5;font-style:italic">
+These are directional ranges for narrative purposes. Exact numbers are pilot deliverables.
+</div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Same customer. Same call. Two different experts.</div><div class="stage-subtitle">The only difference is the decision layer. On the left, the expert screen as it renders on Pega ADP today. On the right, the same expert screen on Redis. Same UI, same care workflow, same team member. The NBA panel is the product.</div></div>
+<div class="outcome-split">
+<div class="outcome-col">
+<div class="outcome-header generic">Pega ADP &middot; 420 ms decision</div>
+<div class="expert-screen">
+<div class="expert-head generic-head"><div class="expert-logo">T-MOBILE CARE</div><div class="expert-meta">GENERIC SCRIPT</div></div>
+<div class="expert-body">
+<div class="expert-cust"><div class="expert-cust-av">AR</div><div><div class="expert-cust-name">Alina Rivera</div><div class="expert-cust-sub">Acct #••4721 &middot; 4 lines</div></div></div>
+<div class="expert-section-label">Next Best Action</div>
+<div class="expert-offer">
+<div class="expert-offer-title">Retention credit $15</div>
+<div class="expert-offer-desc">Apply a one-time loyalty credit. Thank the customer for their tenure.</div>
+<div class="expert-offer-meta"><span>Confidence: unknown</span><span>Source: rule-based</span></div>
+</div>
+<div class="expert-script">"Hi Alina, thank you for being a valued T-Mobile customer for 11 years. I see you're having some issues. I can apply a $15 credit for the inconvenience..."</div>
+<div style="margin-top:12px"><span class="expert-latency-chip stale">Decision: 420 ms &middot; stale signals</span></div>
+</div>
+</div>
+<div class="outcome-metrics generic-m">
+<div class="outcome-metric"><div class="outcome-metric-value">31%</div><div class="outcome-metric-label">Save probability</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">$0</div><div class="outcome-metric-label">HSI attach</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">-$15</div><div class="outcome-metric-label">Margin impact</div></div>
+</div>
+</div>
+<div class="outcome-col">
+<div class="outcome-header personalized">Redis NBA &middot; 8 ms decision</div>
+<div class="expert-screen">
+<div class="expert-head"><div class="expert-logo">T-MOBILE CARE</div><div class="expert-meta">NBA &middot; NETWORK-AWARE</div></div>
+<div class="expert-body">
+<div class="expert-cust"><div class="expert-cust-av">AR</div><div><div class="expert-cust-name">Alina Rivera</div><div class="expert-cust-sub">Magenta MAX &middot; 4 lines &middot; HSI eligible &middot; UC-confirmed</div></div></div>
+<div class="expert-section-label">Recommended Action (94% confidence)</div>
+<div class="expert-offer">
+<div class="expert-offer-title">Free CellSpot + Home Internet 20% off</div>
+<div class="expert-offer-desc">Indoor signal fix paired with HSI on her existing UC coverage. One call resolves the network issue and opens a 36-month HSI relationship.</div>
+<div class="expert-offer-meta"><span><b class="magenta">LTV +$2,840</b></span><span><b class="teal">Propensity 0.91</b></span><span>Vector 0.89</span></div>
+</div>
+<div class="expert-script">"Hi Alina, I pulled your account. I can see you've had 2 dropped calls this week at home, and your outdoor 5G signal is actually strong. Let's fix the indoor issue today with a free CellSpot, and I can get you Home Internet at 20% off for the next year on the same UC network..."</div>
+<div style="margin-top:12px"><span class="expert-latency-chip">Decision: 8 ms &middot; live signals</span></div>
+</div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">94%</div><div class="outcome-metric-label">Save probability</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">+$2,840</div><div class="outcome-metric-label">HSI LTV attach</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">+$3,920</div><div class="outcome-metric-label">Net call value</div></div>
+</div>
+</div>
+</div>
+<div style="margin-top:20px;padding:14px 18px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:13px;color:var(--text2);line-height:1.6;text-align:center">
+<strong style="color:var(--text)">Same screen. Same expert. Same moment.</strong> The NBA panel changes because Redis saw the network signal, the HSI eligibility, and the UC coverage in one sub-10ms context call. Pega returned a credit. Redis returned a resolution and an expansion.
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: Architecture Recap</div><div class="stage-title">Proven metrics on the same five tiers</div><div class="stage-subtitle">Back where we started. Five tiers, one continuous loop, Pega ADP replaced. Latency closed from 300-900 ms to under 10 ms. Eight TB of online memory serving every channel. Active-Active across us-east-1 and us-west-2 with CRDT conflict resolution and 99.999% SLA. The same architecture that handled this one call scales to 2.4 million decisions per second across the base.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Cassandra</h4><p>Interaction history</p></div>
+<div class="arch-node"><h4>Postgres</h4><p>Customer / line tables</p></div>
+<div class="arch-node"><h4>Databricks</h4><p>Offline ML feature store</p></div>
+<div class="arch-node"><h4>EventHub / Kafka</h4><p>Live signal stream</p></div>
+<div class="arch-node"><h4>Network Telemetry</h4><p>Coverage, diagnostics</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC, sub-second sync, proactive staging, zero cold starts</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>Feature engineering, train-serve parity</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (8TB Unified Memory &middot; Active-Active)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Flex 8TB</h4><p>Full IH, customer/line, DDS, feature store, embeddings</p></div>
+<div class="arch-node"><h4>Active-Active</h4><p>us-east-1 + us-west-2, CRDT sync, zero data loss</p></div>
+<div class="arch-node"><h4>Vector Index</h4><p>User and offer embeddings, semantic matching</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">IH 582GB</div>
+<div class="arch-data-chip">DDS 435GB</div>
+<div class="arch-data-chip">Customer 295GB</div>
+<div class="arch-data-chip">Features + Embeddings 4-5TB</div>
+<div class="arch-data-chip">Aggregates 72GB</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine (Replaces Pega ADP)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules / Eligibility</h4><p>Frequency caps, offer catalog, compliance</p></div>
+<div class="arch-node"><h4>ML Ranker</h4><p>Propensity + LTV weighting</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>User-offer semantic match</p></div>
+<div class="arch-node"><h4>Policy Arbitration</h4><p>Attribution-aware action selection</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>T-Life App</h4><p>In-app offers, device, billing</p></div>
+<div class="arch-node"><h4>Care Desktop</h4><p>Expert NBA panel</p></div>
+<div class="arch-node"><h4>Web + Retail</h4><p>T-Mobile.com + store POS</p></div>
+<div class="arch-node"><h4>SMS / Push / Email</h4><p>Proactive outbound</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision logs &rarr; Kafka &rarr; Databricks retraining &rarr; Updated policy &rarr; Redeployed to Redis</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Decision Latency (P99)</div><div class="arch-callout-value teal">8.0 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Save-Rate Lift</div><div class="arch-callout-value orange">31% &rarr; 94%</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Net Call Value</div><div class="arch-callout-value amber">+$3,920</div></div>
+</div>
+<div class="aa-wrap">
+<div class="aa-region"><div class="aa-region-label">us-east-1 (EKS)</div><div class="aa-region-val">Active &middot; sub-ms local reads/writes</div><div class="aa-region-sub">Full 8TB Flex, CRDT-converged</div></div>
+<div class="aa-region"><div class="aa-region-label">us-west-2 (EKS)</div><div class="aa-region-val">Active &middot; sub-ms local reads/writes</div><div class="aa-region-sub">Full 8TB Flex, CRDT-converged &middot; 99.999% SLA</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.3ms','1.2ms','2.4ms','3.5ms','6.6ms','7.4ms','8.0ms','8.0ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
