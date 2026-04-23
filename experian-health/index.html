@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | Experian Health</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --exp-blue:#26478D;--exp-purple:#41338C;
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:780px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.08s}.flow-item:nth-child(2){animation-delay:.16s}.flow-item:nth-child(3){animation-delay:.24s}.flow-item:nth-child(4){animation-delay:.32s}.flow-item:nth-child(5){animation-delay:.4s}.flow-item:nth-child(6){animation-delay:.48s}.flow-item:nth-child(7){animation-delay:.56s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:46px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px;text-align:center;line-height:1}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.risk-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
+.risk-bar div{height:100%}
+.risk-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
+.applicant-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.applicant-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--exp-blue),var(--exp-purple));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
+.applicant-name{font-size:17px;font-weight:700}.applicant-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.applicant-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(0,201,167,.12);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.applicant-badge.suspect{background:rgba(220,56,44,.12);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.applicant-badge.review{background:rgba(255,188,87,.12);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.signal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.signal-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.signal-card:nth-child(1){animation-delay:.15s}.signal-card:nth-child(2){animation-delay:.3s}.signal-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.signal-card.alert{border-color:var(--red);background:rgba(220,56,44,.05);box-shadow:0 0 24px rgba(220,56,44,.08)}
+.signal-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.signal-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.signal-card.alert .signal-rank{color:var(--red)}
+.signal-card.winner .signal-rank{color:var(--teal)}
+.signal-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.signal-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.signal-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-pac{background:rgba(79,140,255,.15);color:var(--blue)}
+.src-aiadv{background:rgba(167,139,250,.15);color:var(--purple)}
+.src-claimsource{background:rgba(0,201,167,.15);color:var(--teal)}
+.src-bureau{background:rgba(255,188,87,.15);color:var(--amber)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:32px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+.arch-callout-value.red{color:var(--red)}
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+.app-screen{background:#FAFBFC;border-radius:14px;border:2px solid #333;overflow:hidden;position:relative;color:#1A1A1A}
+.app-screen.declined{border-color:rgba(220,56,44,.5)}
+.app-screen.approved{border-color:rgba(0,201,167,.4)}
+.app-header{padding:18px 24px;background:var(--exp-blue);display:flex;align-items:center;justify-content:space-between}
+.app-brand{color:#fff;font-size:14px;font-weight:800;letter-spacing:.5px}
+.app-step{color:rgba(255,255,255,.7);font-size:11px;font-family:var(--mono)}
+.app-body{padding:24px}
+.app-applicant{display:flex;align-items:center;gap:14px;padding-bottom:18px;border-bottom:1px solid #E5E7EB;margin-bottom:18px}
+.app-avatar-sm{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--exp-blue),var(--exp-purple));color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+.app-applicant-name{font-size:14px;font-weight:700;color:#1A1A1A}
+.app-applicant-info{font-size:11px;color:#6B7280;margin-top:2px;font-family:var(--mono)}
+.app-fields{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.app-field{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6}
+.app-field-label{color:#6B7280}
+.app-field-value{color:#1A1A1A;font-weight:600;font-family:var(--mono)}
+.app-decision{padding:18px;border-radius:10px;text-align:center;margin-top:18px}
+.app-decision.approve{background:rgba(0,201,167,.08);border:2px solid rgba(0,201,167,.3)}
+.app-decision.decline{background:rgba(220,56,44,.06);border:2px solid rgba(220,56,44,.3)}
+.app-decision-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
+.app-decision.approve .app-decision-label{color:var(--teal)}
+.app-decision.decline .app-decision-label{color:var(--red)}
+.app-decision-value{font-size:22px;font-weight:800;letter-spacing:.5px}
+.app-decision.approve .app-decision-value{color:#00876A}
+.app-decision.decline .app-decision-value{color:#A8261D}
+.app-decision-detail{font-size:11px;color:#6B7280;margin-top:6px}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+.context-banner{padding:14px 20px;border-radius:10px;background:linear-gradient(90deg,rgba(220,56,44,.06),rgba(0,201,167,.04));border:1px solid rgba(220,56,44,.15);margin-bottom:20px;font-size:13px;color:var(--text2);display:flex;align-items:center;gap:12px}
+.context-banner strong{color:var(--red);font-weight:700}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.signal-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | Experian Health</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Registration</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Decisioning</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Financial Impact</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Experian Health's Real-Time Claims Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. Experian Health's source systems feed Redis. Redis decides. The registrar sees a verified, eligibility-confirmed, denial-scored claim recommendation in under 10 milliseconds, before the patient finishes checking in.</div></div>
+<div class="context-banner"><strong>Powered by Redis Context Surfaces:</strong>&nbsp;Assembling patient identity, 1,700+ payer feeds, historical claim patterns, and AI Advantage denial models into a single decision package in under 10ms.</div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>EHR Systems</h4><p>Epic, Cerner, Meditech</p></div>
+<div class="arch-node"><h4>Payer Network</h4><p>1,700+ payer feeds</p></div>
+<div class="arch-node"><h4>Wave HDC</h4><p>AI-guided insurance capture</p></div>
+<div class="arch-node"><h4>ClaimSource</h4><p>Historical claim outcomes</p></div>
+<div class="arch-node"><h4>AI Advantage</h4><p>Denial prediction model</p></div>
+<div class="arch-node"><h4>Consumer Data</h4><p>Bureau identity graph</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node" style="flex:3"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from EHRs, payer 271 responses, Wave HDC, ClaimSource, AI Advantage. Sub-second sync. Zero custom code.</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Patient 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live eligibility</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, claim history, payer behavior</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Identity Graph</div>
+<div class="arch-data-chip">COB Primacy</div>
+<div class="arch-data-chip">Claim Vectors</div>
+<div class="arch-data-chip">Payer Features</div>
+<div class="arch-data-chip">Streams</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Eligibility Rules</h4><p>271 response, COB, MBI</p></div>
+<div class="arch-node"><h4>Denial Prediction</h4><p>AI Advantage ML model</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Filter + vector in one query</p></div>
+<div class="arch-node"><h4>Semantic Caching</h4><p>GenAI denial explanations</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Patient Access Curator</h4><p>Registrar one-click UI</p></div>
+<div class="arch-node"><h4>ClaimSource</h4><p>Clean claim submission</p></div>
+<div class="arch-node"><h4>Denial Workflow</h4><p>Pre-submit flags</p></div>
+<div class="arch-node"><h4>Provider Analytics</h4><p>Denial trend feedback</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Adjudicated claim outcomes &rarr; Kafka &rarr; Data lake / Databricks training &rarr; Updated denial models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">End-to-End Latency</div><div class="arch-callout-value teal">&lt;10 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Daily Eligibility Checks</div><div class="arch-callout-value orange">14M+ across provider network</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Denial Reduction Target</div><div class="arch-callout-value amber">40-60% lift</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: REGISTRATION ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Patient Registration</div><div class="stage-title">Elena Vasquez checks in at Summit Valley Health</div><div class="stage-subtitle">An 8-hospital regional health system. The registrar clicks once. Under ten milliseconds later, every eligibility question, every coverage priority, and every denial risk on the inbound claim is resolved. Before Elena sits down in the waiting room.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Inbound Registration Event</div>
+<div class="applicant-card"><div class="applicant-avatar">EV</div><div><div class="applicant-name">Elena Vasquez</div><div class="applicant-detail">Age 54 | Summit Valley Health &middot; Cardiology | Scheduled echocardiogram, $4,800 billable</div></div><div class="applicant-badge review">INCOMPLETE COVERAGE</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">patient_check_in</span></div>
+<div class="data-row"><span class="data-label">Registrar</span><span class="data-value">Dana Whitfield (Patient Access)</span></div>
+<div class="data-row"><span class="data-label">Epic record</span><span class="data-value amber">Last updated 11 months ago</span></div>
+<div class="data-row"><span class="data-label">Declared primary</span><span class="data-value">Medicare Advantage (regional payer)</span></div>
+<div class="data-row"><span class="data-label">Secondary / tertiary on file</span><span class="data-value red">None (not captured)</span></div>
+<div class="data-row"><span class="data-label">Service type</span><span class="data-value amber">Outpatient echocardiogram (CPT 93306)</span></div>
+<div class="data-row"><span class="data-label">Registrar action</span><span class="data-value teal">One click &rarr; Patient Access Curator</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Registration Is Expensive</div>
+<div class="risk-bar">
+<div style="background:var(--red);width:34%"></div>
+<div style="background:var(--orange);width:34%"></div>
+<div style="background:var(--amber);width:20%"></div>
+<div style="background:rgba(255,255,255,.1);width:12%"></div>
+</div>
+<div class="risk-label"><span style="color:var(--red)">Missed COB 34%</span><span style="color:var(--orange)">MBI error 34%</span><span style="color:var(--amber)">Auth gap 20%</span></div>
+<div class="data-rows" style="margin-top:14px">
+<div class="data-row"><span class="data-label">Declared plan is actually secondary</span><span class="data-value red">Commercial plan is primary (4 mo new)</span></div>
+<div class="data-row"><span class="data-label">Third active coverage unknown to facility</span><span class="data-value red">Spouse's employer plan (tertiary)</span></div>
+<div class="data-row"><span class="data-label">MBI on record</span><span class="data-value orange">Format valid, not verified</span></div>
+<div class="data-row"><span class="data-label">Prior auth status</span><span class="data-value amber">Required for CPT 93306, unconfirmed</span></div>
+<div class="data-row"><span class="data-label">Historic denial rate for this mix</span><span class="data-value red">73% (wrong-primary pattern)</span></div>
+<div class="data-row"><span class="data-label">Manual resolution time</span><span class="data-value orange">47 minutes across 3 systems</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">The denial trap:</strong> Without real-time context, Summit Valley submits this claim to the wrong primary payer. 14 days later it bounces. The $4,800 goes to rework or write-off. This happens at 41% of health systems with denial rates above 10%.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Six source systems. One pipeline. Zero custom code.</div><div class="stage-subtitle">Every system that carries signal about Elena flows into Redis through RDI. Payer 271 responses, EHR updates, Wave HDC insurance discovery, ClaimSource historical outcomes, AI Advantage model scores, bureau identity data. All of it lands in the context tier in under a second.</div><span class="component-tag">Redis Data Integration</span><span class="component-tag">CDC Pipeline</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Data Flowing Into Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,255,255,.06);color:var(--text)">EHR</div><div><div class="flow-source">Epic &middot; Patient demographics</div><div class="flow-detail">Name, DOB, SSN, address, declared payers &middot; HL7 FHIR feed</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.15);color:var(--teal)">271</div><div><div class="flow-source">Payer network &middot; 271 eligibility responses</div><div class="flow-detail">Active coverage, benefits, deductible met &middot; 1,700+ payers</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.15);color:var(--blue)">WAVE</div><div><div class="flow-source">Wave HDC &middot; AI insurance discovery</div><div class="flow-detail">Hidden secondary/tertiary coverage inference &middot; real-time</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,188,87,.15);color:var(--amber)">CLMS</div><div><div class="flow-source">ClaimSource &middot; Historical claim outcomes</div><div class="flow-detail">14M+ adjudicated claims &middot; denial reasons, payer patterns</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.15);color:var(--purple)">AIAV</div><div><div class="flow-source">AI Advantage &middot; Denial prediction scores</div><div class="flow-detail">Payer behavior model &middot; claim-type denial probability</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.15);color:var(--red)">BURO</div><div><div class="flow-source">Consumer data &middot; Bureau identity graph</div><div class="flow-detail">Cross-reference for MBI, demographics, address history</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">RDI Performance</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Source systems unified</span><span class="data-value teal">6</span></div>
+<div class="data-row"><span class="data-label">Payers on live 271 feed</span><span class="data-value">1,700+</span></div>
+<div class="data-row"><span class="data-label">Events ingested per second</span><span class="data-value teal">47,000</span></div>
+<div class="data-row"><span class="data-label">End-to-end CDC latency</span><span class="data-value teal">&lt;800 ms</span></div>
+<div class="data-row"><span class="data-label">Custom connector code</span><span class="data-value teal">0 lines</span></div>
+<div class="data-row"><span class="data-label">Data freshness in Redis</span><span class="data-value teal">0.4 sec behind source</span></div>
+<div class="data-row"><span class="data-label">System of record impact</span><span class="data-value">Zero &middot; Epic unchanged</span></div>
+</div>
+<div style="margin-top:16px;padding:13px;border-radius:8px;background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--teal)">No rip-and-replace:</strong> Epic stays the system of record. ClaimSource stays the system of submission. Redis becomes the system of engagement that makes everything else fast.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Elena's Patient 360, assembled in under 10 milliseconds</div><div class="stage-subtitle">Two planes of context. Historical: her three-year Experian identity graph, prior claim outcomes, payer relationships. Live: the 271 responses running in parallel across three payers, COB primacy resolution, MBI verification, insurance discovery. One unified view, zero stitching.</div><span class="component-tag">Redis Context Surfaces</span><span class="component-tag">Feature Store</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Historical Profile (Patient 360)</div>
+<div class="risk-bar">
+<div style="background:var(--teal);width:62%"></div>
+<div style="background:var(--blue);width:24%"></div>
+<div style="background:var(--amber);width:14%"></div>
+</div>
+<div class="risk-label"><span style="color:var(--teal)">Verified identity 62%</span><span style="color:var(--blue)">Coverage history 24%</span><span style="color:var(--amber)">Risk flags 14%</span></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Identity confidence (bureau)</span><span class="data-value teal">0.97 &middot; verified 3 yrs</span></div>
+<div class="data-row"><span class="data-label">Prior visits to Summit Valley</span><span class="data-value">6 encounters, 4 years</span></div>
+<div class="data-row"><span class="data-label">MBI status</span><span class="data-value teal">Validated against SSA</span></div>
+<div class="data-row"><span class="data-label">Historical payer relationships</span><span class="data-value blue">3 plans identified</span></div>
+<div class="data-row"><span class="data-label">Prior denial history</span><span class="data-value amber">2 denials &middot; both COB-related</span></div>
+<div class="data-row"><span class="data-label">Payment history</span><span class="data-value teal">Clean &middot; propensity-to-pay 0.91</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Live Signals (This Encounter)</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">271 response &middot; declared payer</span><span class="data-value amber">Active, but SECONDARY</span></div>
+<div class="data-row"><span class="data-label">271 response &middot; employer plan</span><span class="data-value teal">Active, PRIMARY (4 mo new)</span></div>
+<div class="data-row"><span class="data-label">271 response &middot; spouse plan</span><span class="data-value blue">Active, TERTIARY</span></div>
+<div class="data-row"><span class="data-label">COB primacy determined</span><span class="data-value teal">Commercial &rarr; Medicare Adv &rarr; Spouse</span></div>
+<div class="data-row"><span class="data-label">Prior auth for CPT 93306</span><span class="data-value teal">On file with primary, confirmed</span></div>
+<div class="data-row"><span class="data-label">Wave HDC insurance discovery</span><span class="data-value teal">+1 coverage flagged ($31K/yr avg)</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--teal)">Context assembled in 4.1 ms:</strong> Identity graph, payer feeds, claim history, and AI inference fused into a single decision package. The registrar never sees the stitching. The model never waits for it.</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 5: FEATURE SERVING ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the denial prediction model</div><div class="stage-subtitle">Featureform pulls every signal the AI Advantage denial model needs into a single vector. Patient features, payer behavior features, claim-type features, and facility trend features merge in sub-millisecond. No lookups during scoring.</div><span class="component-tag">Featureform</span><span class="component-tag">Real-Time Feature Store</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">PATIENT_IDENTITY_CONFIDENCE</div><div class="feat-desc">Bureau-validated identity match score. MBI, SSN, address, demographic cross-reference.</div><div class="feat-value-row"><span class="feat-value">0.97</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">ACTIVE_COVERAGE_COUNT</div><div class="feat-desc">Count of active payer plans discovered across 271 responses and Wave HDC inference</div><div class="feat-value-row"><span class="feat-value">3 plans</span><span class="feat-latency">0.6 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">COB_PRIMACY_SCORE</div><div class="feat-desc">Confidence in coordination of benefits primacy assignment. Newer employer plan beats Medicare Advantage.</div><div class="feat-value-row"><span class="feat-value">0.94</span><span class="feat-latency">0.8 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">PAYER_DENIAL_RATE_CPT</div><div class="feat-desc">This payer's historical denial rate on CPT 93306 at this facility, trailing 90 days</div><div class="feat-value-row"><span class="feat-value">4.2%</span><span class="feat-latency">0.5 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">FACILITY_DENIAL_TREND_30D</div><div class="feat-desc">Summit Valley's moving denial rate. Detects payer policy changes before CMS publishes.</div><div class="feat-value-row"><span class="feat-value">8.1% (rising)</span><span class="feat-latency">0.7 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">CLAIM_EMBEDDING_512D</div><div class="feat-desc">Vector embedding of full claim context for similarity search against 14M adjudicated claims</div><div class="feat-value-row"><span class="feat-value">[0.41, 0.83, ...]</span><span class="feat-latency">0.9 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0">
+<div class="viz-panel-title">Feature Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Features Hydrated</div><div style="font-size:26px;font-weight:700;color:var(--text);font-family:var(--mono)">287</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">1.8 ms</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Train / Serve Parity</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Cache Hit Rate</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">99.4%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: DECISIONING ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Decisioning</div><div class="stage-title">Three routing options. One correct answer. Scored in 3.2 milliseconds.</div><div class="stage-subtitle">Vector Search matches Elena's claim pattern against 14M historical denied claims. Hybrid Search runs eligibility across three payers with filters (plan type, service date, state, prior auth) in a single query. The denial prediction model fires. Three candidate routings surface with a clear winner.</div><span class="component-tag">Vector Database</span><span class="component-tag">Hybrid Search</span><span class="component-tag">Denial Prediction Model</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">287 features evaluated</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.12);font-size:12px;color:var(--purple)">14M historical claims in vector index</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(79,140,255,.06);border:1px solid rgba(79,140,255,.12);font-size:12px;color:var(--blue)">Hybrid query: filter + vector in 3.2ms</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Recommendation: Option B &middot; 12% denial risk</div>
+</div>
+<div class="signal-grid">
+<div class="signal-card alert"><div class="signal-rank">Option A &middot; Reject</div><div class="signal-source src-claimsource">Declared Primary</div><div class="signal-title">Submit to Medicare Advantage</div><div class="signal-meta">As declared at check-in &middot; historical wrong-primary pattern</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Claim looks valid. Medicare Advantage will deny because the commercial employer plan is actually primary. Denial lands 14 days later, $4,800 to rework queue.</div><div class="score-bar"><div class="score-fill" style="--score:73%;background:var(--red)"></div></div><div class="score-label"><span>Denial risk</span><span style="color:var(--red)">0.73</span></div></div>
+<div class="signal-card winner"><div class="signal-rank">Option B &middot; Recommended</div><div class="signal-source src-pac">Patient Access Curator</div><div class="signal-title">Submit to Employer Plan (primary), MA (secondary)</div><div class="signal-meta">Wave HDC discovery &middot; 271 primacy confirmed &middot; auth on file</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Commercial plan is primary per 271 response. Prior auth confirmed. COB sequence correct. Clean claim, first-pass paid in 18 days.</div><div class="score-bar"><div class="score-fill" style="--score:88%;background:var(--teal)"></div></div><div class="score-label"><span>Denial risk</span><span style="color:var(--teal)">0.12</span></div></div>
+<div class="signal-card"><div class="signal-rank">Option C &middot; Hold</div><div class="signal-source src-aiadv">AI Advantage</div><div class="signal-title">Flag for pre-auth verification</div><div class="signal-meta">Conservative path &middot; delays claim 24-72 hours</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Pause to re-verify authorization. Reduces denial risk to 4% but adds 24-72 hours of DSO and touches a human. Use only when confidence is split.</div><div class="score-bar"><div class="score-fill" style="--score:60%;background:var(--amber)"></div></div><div class="score-label"><span>Denial risk</span><span style="color:var(--amber)">0.04</span></div></div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 7: FINANCIAL IMPACT ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Financial Impact</div><div class="stage-title">Preventing one denial is tactical. Preventing the pattern is strategic.</div><div class="stage-subtitle">82% of providers say reducing denials is a priority. 41% now face denial rates above 10%. The Redis-powered model does not just catch this one claim. It learns the pattern across 14M daily decisions and feeds it back to every provider on the platform. Semantic Caching keeps the GenAI denial-explanation layer economically viable at scale.</div><span class="component-tag">Semantic Caching (LangCache)</span><span class="component-tag">Revenue Cycle Analytics</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Revenue Impact &middot; Per Encounter and At Scale</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Elena's claim value</span><span class="data-value">$4,800</span></div>
+<div class="data-row"><span class="data-label">Denial avoided on this encounter</span><span class="data-value teal">$4,800 secured, first-pass</span></div>
+<div class="data-row"><span class="data-label">Summit Valley annual encounters</span><span class="data-value">1.2M</span></div>
+<div class="data-row"><span class="data-label">Current denial rate</span><span class="data-value red">11.4% ($58M exposure)</span></div>
+<div class="data-row"><span class="data-label">Projected denial rate with Redis</span><span class="data-value teal">4.5% ($23M exposure)</span></div>
+<div class="data-row"><span class="data-label">Net revenue secured annually</span><span class="data-value teal">$35M recurring + $12M rework labor</span></div>
+<div class="data-row"><span class="data-label">Days sales outstanding improvement</span><span class="data-value teal">8 days faster (18 vs 26)</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The market shift:</strong> 67% of providers believe AI can improve the claims process. Only 14% have actually deployed it. The providers who move first will compound their denial advantage against those still stuck in manual eligibility loops.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">GenAI Cost Economics</div>
+<div style="padding:14px;border-radius:10px;background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.15);margin-bottom:14px">
+<div style="font-size:11px;color:var(--purple);font-family:var(--mono);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">Without Semantic Caching</div>
+<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--text)">$1,240 / hr</div>
+<div style="font-size:11px;color:var(--text3);margin-top:4px">Every denial explanation hits the LLM. 1,200ms avg latency, $0.03 per call.</div>
+</div>
+<div style="padding:14px;border-radius:10px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.2)">
+<div style="font-size:11px;color:var(--teal);font-family:var(--mono);font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">With Semantic Caching</div>
+<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--teal)">$430 / hr</div>
+<div style="font-size:11px;color:var(--text3);margin-top:4px">Similar denial reasons served from cache. 2ms latency, $0 per cache hit.</div>
+</div>
+<div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<div style="text-align:center;padding:10px;border-radius:8px;background:rgba(0,201,167,.04);border:1px solid rgba(0,201,167,.15)"><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--teal)">47%</div><div style="font-size:10px;color:var(--text3);margin-top:2px">Cache hit rate</div></div>
+<div style="text-align:center;padding:10px;border-radius:8px;background:rgba(0,201,167,.04);border:1px solid rgba(0,201,167,.15)"><div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--teal)">65%</div><div style="font-size:10px;color:var(--text3);margin-top:2px">LLM cost reduction</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Two registrations. Same patient. Two completely different financial outcomes.</div><div class="stage-subtitle">The generic path: three systems queried sequentially, 47 seconds, manual steps, denial 14 days later. The Redis path: one click, 8.7ms, clean claim the first time, paid in 18 days. Same registrar. Same patient. Same health system. The difference is the unified Patient 360 in Redis.</div></div>
+<div class="outcome-split">
+<!-- WITHOUT REDIS -->
+<div class="outcome-col">
+<div class="outcome-header generic" style="background:rgba(220,56,44,.08);color:var(--red);border-color:rgba(220,56,44,.2)">Without Redis &middot; Generic RCM Workflow</div>
+<div class="app-screen declined">
+<div class="app-header"><div class="app-brand">PATIENT REGISTRATION</div><div class="app-step">RESOLVED &middot; 47 sec</div></div>
+<div class="app-body">
+<div class="app-applicant"><div class="app-avatar-sm">EV</div><div><div class="app-applicant-name">Elena Vasquez</div><div class="app-applicant-info">DOB ****-1971 &middot; Cardiology &middot; $4,800 billable</div></div></div>
+<div class="app-fields">
+<div class="app-field"><span class="app-field-label">Primary payer submitted</span><span class="app-field-value" style="color:#A8261D">Medicare Advantage (wrong)</span></div>
+<div class="app-field"><span class="app-field-label">Secondary coverage</span><span class="app-field-value" style="color:#A8261D">Not discovered</span></div>
+<div class="app-field"><span class="app-field-label">Tertiary coverage</span><span class="app-field-value" style="color:#A8261D">Not discovered</span></div>
+<div class="app-field"><span class="app-field-label">Prior auth</span><span class="app-field-value" style="color:#A8261D">Not verified with correct payer</span></div>
+<div class="app-field"><span class="app-field-label">Systems touched</span><span class="app-field-value">3 portals, manual</span></div>
+</div>
+<div class="app-decision decline"><div class="app-decision-label">Result</div><div class="app-decision-value">CLAIM DENIED</div><div class="app-decision-detail">14 days later. $4,800 routed to rework queue. Staff time: 2.4 hrs. 31% write-off probability.</div></div>
+</div>
+</div>
+<div class="outcome-metrics generic-m" style="background:rgba(220,56,44,.05);border-color:rgba(220,56,44,.15)">
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">47 sec</div><div class="outcome-metric-label">Registration time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">14 days</div><div class="outcome-metric-label">To denial</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--red)">$4,800</div><div class="outcome-metric-label">At risk</div></div>
+</div>
+</div>
+<!-- WITH REDIS -->
+<div class="outcome-col">
+<div class="outcome-header personalized">With Redis &middot; Patient Access Curator</div>
+<div class="app-screen approved">
+<div class="app-header" style="background:#00876A"><div class="app-brand">PATIENT ACCESS CURATOR</div><div class="app-step">DECISION COMPLETE &middot; 8.7 ms</div></div>
+<div class="app-body">
+<div class="app-applicant"><div class="app-avatar-sm" style="background:linear-gradient(135deg,#00876A,#00C9A7)">EV</div><div><div class="app-applicant-name">Elena Vasquez</div><div class="app-applicant-info">DOB ****-1971 &middot; Cardiology &middot; $4,800 billable</div></div></div>
+<div class="app-fields">
+<div class="app-field"><span class="app-field-label">Primary payer (COB resolved)</span><span class="app-field-value" style="color:#00876A">Commercial employer plan</span></div>
+<div class="app-field"><span class="app-field-label">Secondary coverage</span><span class="app-field-value" style="color:#00876A">Medicare Advantage</span></div>
+<div class="app-field"><span class="app-field-label">Tertiary coverage</span><span class="app-field-value" style="color:#00876A">Spouse plan (Wave HDC find)</span></div>
+<div class="app-field"><span class="app-field-label">Prior auth</span><span class="app-field-value" style="color:#00876A">Confirmed on file</span></div>
+<div class="app-field"><span class="app-field-label">Denial risk score</span><span class="app-field-value" style="color:#00876A">0.12 / 1.00</span></div>
+</div>
+<div class="app-decision approve"><div class="app-decision-label">Result</div><div class="app-decision-value">CLEAN CLAIM</div><div class="app-decision-detail">Submitted to correct primary. First-pass paid. Cash posted in 18 days. Zero rework.</div></div>
+</div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">8.7 ms</div><div class="outcome-metric-label">Registration time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">18 days</div><div class="outcome-metric-label">To payment</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">$4,800</div><div class="outcome-metric-label">Secured</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Under ten milliseconds. One clean claim.</div><div class="stage-subtitle">Every component you just saw running together. Epic, the payer network, Wave HDC, ClaimSource, and AI Advantage feed Redis. Redis decides. Patient Access Curator renders the decision to Dana at the registration desk. The result: fewer denials, faster cash, and a unified intelligence layer across every Experian Health product the provider uses.</div></div>
+<div class="context-banner"><strong>Redis Context Surfaces &middot; Proven:</strong>&nbsp;8.7ms end-to-end, 287 features hydrated, 14M+ claims in the vector index, 47% semantic cache hit rate, 99.999% SLA.</div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>EHR Systems</h4><p>Epic, Cerner, Meditech</p></div>
+<div class="arch-node"><h4>Payer Network</h4><p>1,700+ payer feeds</p></div>
+<div class="arch-node"><h4>Wave HDC</h4><p>AI-guided insurance capture</p></div>
+<div class="arch-node"><h4>ClaimSource</h4><p>Historical claim outcomes</p></div>
+<div class="arch-node"><h4>AI Advantage</h4><p>Denial prediction model</p></div>
+<div class="arch-node"><h4>Consumer Data</h4><p>Bureau identity graph</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node" style="flex:3"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from EHRs, payer 271 responses, Wave HDC, ClaimSource, AI Advantage. Sub-second sync. Zero custom code.</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Patient 360)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, sub-ms lookups, live eligibility</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, claim history, payer behavior</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>ML feature store, train/serve parity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Identity Graph</div>
+<div class="arch-data-chip">COB Primacy</div>
+<div class="arch-data-chip">Claim Vectors</div>
+<div class="arch-data-chip">Payer Features</div>
+<div class="arch-data-chip">Streams</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Eligibility Rules</h4><p>271 response, COB, MBI</p></div>
+<div class="arch-node"><h4>Denial Prediction</h4><p>AI Advantage ML model</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Filter + vector in one query</p></div>
+<div class="arch-node"><h4>Semantic Caching</h4><p>GenAI denial explanations</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Patient Access Curator</h4><p>Registrar one-click UI</p></div>
+<div class="arch-node"><h4>ClaimSource</h4><p>Clean claim submission</p></div>
+<div class="arch-node"><h4>Denial Workflow</h4><p>Pre-submit flags</p></div>
+<div class="arch-node"><h4>Provider Analytics</h4><p>Denial trend feedback</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Adjudicated claim outcomes &rarr; Kafka &rarr; Data lake / Databricks training &rarr; Updated denial models &rarr; Redeployed to Redis context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Pipeline Latency (P99)</div><div class="arch-callout-value teal">8.7 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Denial Reduction Target</div><div class="arch-callout-value orange">40-60%</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Platform SLA</div><div class="arch-callout-value amber">99.999%</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.2ms','1.2ms','4.1ms','5.9ms','7.2ms','8.0ms','8.7ms','8.7ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
