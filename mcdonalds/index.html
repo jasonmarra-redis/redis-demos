@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Real-Time Decisioning Demo | McDonald's</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DA291C;--yellow:#FFC72C;--gold:#FFB000;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;--green:#29C36A;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(218,41,28,.12);color:var(--red);border:1px solid rgba(218,41,28,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(255,199,44,.12);color:var(--yellow);border:1px solid rgba(255,199,44,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:860px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(218,41,28,.1);color:var(--red);border:1px solid rgba(218,41,28,.15);margin-right:8px;margin-top:12px}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(218,41,28,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.yellow{color:var(--yellow)}.data-value.green{color:var(--green)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.08s}.flow-item:nth-child(2){animation-delay:.16s}.flow-item:nth-child(3){animation-delay:.24s}.flow-item:nth-child(4){animation-delay:.32s}.flow-item:nth-child(5){animation-delay:.4s}.flow-item:nth-child(6){animation-delay:.48s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:46px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px;text-align:center;line-height:1}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.daypart-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
+.daypart-bar div{height:100%}
+.daypart-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
+.guest-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.guest-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--yellow),var(--gold));display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#451900;flex-shrink:0}
+.guest-name{font-size:17px;font-weight:700}.guest-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.guest-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(255,199,44,.12);color:var(--yellow);border:1px solid rgba(255,199,44,.2)}
+.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.content-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.content-card.winner .content-rank{color:var(--teal)}
+.content-title{font-size:15px;font-weight:700;margin-bottom:4px}
+.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.content-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
+.src-value{background:rgba(255,199,44,.12);color:var(--yellow)}
+.src-reorder{background:rgba(79,140,255,.12);color:var(--blue)}
+.src-rewards{background:rgba(167,139,250,.15);color:var(--purple)}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(218,41,28,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(218,41,28,.08);border-color:rgba(218,41,28,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(218,41,28,.5);background:rgba(218,41,28,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(218,41,28,.3);background:rgba(218,41,28,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(218,41,28,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.yellow{color:var(--yellow)}
+.arch-callout-value.amber{color:var(--amber)}
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+.proof-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:4px}
+.proof-card{padding:16px 18px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.proof-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.proof-value{font-size:20px;font-weight:800;line-height:1.1;margin-bottom:6px}
+.proof-value.teal{color:var(--teal)}.proof-value.yellow{color:var(--yellow)}.proof-value.amber{color:var(--amber)}
+.proof-copy{font-size:11px;color:var(--text2);line-height:1.5}
+.mcd-screen{background:#0E0E12;border-radius:28px;border:8px solid #1a1a22;overflow:hidden;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.04);max-width:340px;margin:0 auto}
+.mcd-statusbar{display:flex;justify-content:space-between;align-items:center;padding:10px 22px 4px;font-size:11px;color:var(--text2);font-family:var(--mono);font-weight:700}
+.mcd-header{padding:8px 22px 14px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid rgba(255,255,255,.04)}
+.mcd-logo{font-size:22px;font-weight:800;color:#fff;letter-spacing:1px}
+.mcd-greeting{font-size:11px;font-weight:700;color:#fff;letter-spacing:.5px;font-family:var(--mono);text-transform:uppercase}
+.generic-head .mcd-greeting,.generic-head .mcd-logo{color:var(--text3)!important}
+.mcd-hero{position:relative;padding:22px 22px 20px;display:flex;flex-direction:column;align-items:flex-start;border-bottom:1px solid rgba(255,255,255,.04)}
+.mcd-hero-tag{font-size:9px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;font-family:var(--mono)}
+.mcd-hero-title{font-size:18px;font-weight:800;line-height:1.2;margin-bottom:6px;letter-spacing:-.3px}
+.mcd-hero-desc{font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:14px}
+.mcd-hero-btn{display:inline-block;padding:9px 20px;border-radius:24px;border:1.5px solid var(--yellow);color:#1A1A1A;background:var(--yellow);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px}
+.mcd-row{padding:14px 22px 4px}
+.mcd-row-title{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text);margin-bottom:10px;font-family:var(--mono)}
+.mcd-tiles{display:flex;gap:8px;overflow:hidden;padding-bottom:6px}
+.mcd-tile{flex:1;min-width:0;height:84px;border-radius:8px;display:flex;flex-direction:column;justify-content:space-between;padding:9px 10px;font-size:10px;font-weight:700;line-height:1.25;position:relative}
+.tile-source{font-size:9px;font-weight:800;font-family:var(--mono);letter-spacing:.3px;align-self:flex-start}
+.mcd-order-card{margin:12px 22px 18px;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03)}
+.mcd-order-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.mcd-order-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;font-family:var(--mono)}
+.mcd-order-pill{padding:4px 8px;border-radius:12px;font-size:9px;font-weight:800;font-family:var(--mono)}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#ba2117;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}.mcd-screen{max-width:100%}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | McDonald's</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>App Opens</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Ranking</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Business Optimization</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- STAGE 1 -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">McDonald's app-to-drive-thru decisioning stack</div><div class="stage-subtitle">Five tiers connect guest intent to restaurant execution. App events, loyalty state, menu availability, queue load, and ETA flow into Redis. Redis assembles guest and restaurant context, ranks the next best meal, and triggers Ready on Arrival so prep starts against ETA, not guesswork.</div><span class="component-tag">Redis Context Surfaces</span><span class="component-tag">Redis Streams</span><span class="component-tag">Active-Active</span></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>MyMcDonald's App</h4><p>Search, cart, favorites, check-in</p></div>
+<div class="arch-node"><h4>Loyalty + Offers</h4><p>Points, eligibility, redemptions</p></div>
+<div class="arch-node"><h4>POS + Menu + Inventory</h4><p>Availability, pricing, daypart</p></div>
+<div class="arch-node"><h4>Restaurant Edge + KDS</h4><p>Queue, kitchen load, lane state</p></div>
+<div class="arch-node"><h4>Traffic + Weather APIs</h4><p>ETA, commute, local conditions</p></div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration</h4><p>Fresh menu, offers, and restaurant state</p></div>
+<div class="arch-node"><h4>Redis Streams</h4><p>Ordered app-to-restaurant events</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>Feature engineering and online serving</p></div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(218,41,28,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Surfaces</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot session state and ETA updates</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Guest history and warm context</p></div>
+<div class="arch-node"><h4>Real-Time Feature Store</h4><p>Sub-ms feature hydration</p></div>
+<div class="arch-node"><h4>Active-Active</h4><p>Global low-latency continuity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Guest 360</div>
+<div class="arch-data-chip">ETA</div>
+<div class="arch-data-chip">Queue</div>
+<div class="arch-data-chip">Inventory</div>
+<div class="arch-data-chip">Points</div>
+<div class="arch-data-chip">Session State</div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules + Policy</h4><p>Daypart, availability, guardrails</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Meal and behavior similarity</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Vector plus filters in one query</p></div>
+<div class="arch-node"><h4>Next Best Meal Ranker</h4><p>Conversion, value, and throughput</p></div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Mobile App</h4><p>Personalized value and one-tap order</p></div>
+<div class="arch-node"><h4>Drive-Thru + Ready on Arrival</h4><p>ETA-aware prep timing</p></div>
+<div class="arch-node"><h4>Kitchen Display + Crew Tablet</h4><p>Prep trigger and handoff timing</p></div>
+<div class="arch-node"><h4>CRM + Offers</h4><p>Loyalty follow-up and measurement</p></div>
+</div></div>
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; order_complete and queue telemetry &rarr; streams &rarr; analytics and model refresh &rarr; updated features and rules &rarr; redeployed to Redis</span></div>
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Restaurants</div><div class="arch-callout-value yellow">45,356 globally</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Loyalty Users</div><div class="arch-callout-value teal">Nearly 210M active</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Ready on Arrival</div><div class="arch-callout-value amber">Wait times cut by 50%+</div></div>
+</div>
+</div>
+</div>
+
+<!-- STAGE 2 -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: App Session Start</div><div class="stage-title">Jasmine starts a breakfast order on the McDonald's app</div><div class="stage-subtitle">A session event fires while Jasmine is seven minutes from her usual drive-thru. Redis has one decision window to pick the right breakfast path, frame the right value construct, and line up prep against her arrival.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Guest Session Event</div>
+<div class="guest-card"><div class="guest-avatar">JC</div><div><div class="guest-name">Jasmine Carter</div><div class="guest-detail">MyMcDonald's member | Weekday breakfast regular | Drive-thru preferred</div></div><div class="guest-badge">MORNING ROUTINE</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">app_session_start</span></div>
+<div class="data-row"><span class="data-label">Time</span><span class="data-value orange">7:18 AM local</span></div>
+<div class="data-row"><span class="data-label">Nearby restaurant ETA</span><span class="data-value teal">7 min by car</span></div>
+<div class="data-row"><span class="data-label">Daypart</span><span class="data-value">Breakfast window open</span></div>
+<div class="data-row"><span class="data-label">Points balance</span><span class="data-value yellow">3,240 pts</span></div>
+<div class="data-row"><span class="data-label">Last breakfast order</span><span class="data-value">Egg McMuffin, Hash Browns, Coffee</span></div>
+<div class="data-row"><span class="data-label">Current value signal</span><span class="data-value amber">McValue shopper</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Why This Matters</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">McDonald's is leaning harder into value and loyalty at the same time. The job is not simply to show breakfast items. It is to choose the breakfast path that fits Jasmine's routine, budget, and arrival moment.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">Jasmine is close enough that the decision now affects restaurant operations, not just the app. If prep timing is wrong, the order sits. If prep timing is right, the handoff feels effortless.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,199,44,.06);border:1px solid rgba(255,199,44,.15);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--yellow)">The moment:</strong> pick the right breakfast value path and decide whether Ready on Arrival should fire before Jasmine enters the lane.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Redis:</strong> the app shows static breakfast tiles, the crew does not see intent until checkout, and restaurant prep starts too late or too early.</div>
+</div></div>
+</div></div>
+
+<!-- STAGE 3 -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Guest, menu, and restaurant signals flow into Redis</div><div class="stage-subtitle">Redis Data Integration keeps menu, offer, and restaurant state fresh. Redis Streams preserves ordered app-to-restaurant events. Featureform turns those feeds into online features ready for decisioning.</div><span class="component-tag">Redis Data Integration</span><span class="component-tag">Redis Streams</span><span class="component-tag">Featureform</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(255,199,44,.12);color:var(--yellow)">APP</div><div><div class="flow-source">MyMcDonald's App + Web Ordering</div><div class="flow-detail">Searches, favorites, cart state, order intent, app session check-in</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:var(--blue)">LOY</div><div><div class="flow-source">Loyalty + Offer Engine</div><div class="flow-detail">Points balance, reward rules, promotion eligibility, offer suppression</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(218,41,28,.12);color:var(--red)">POS</div><div><div class="flow-source">POS, Menu, Pricing, Inventory</div><div class="flow-detail">Breakfast assortment, local pricing, McValue flags, out-of-stock signals</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">KDS</div><div><div class="flow-source">Restaurant Edge + Kitchen Systems</div><div class="flow-detail">Queue length, lane status, kitchen cycle times, accuracy and handoff signals</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">ETA</div><div><div class="flow-source">Geofence + Arrival Events</div><div class="flow-detail">Distance to store, automatic arrival updates, drive-thru check-in trigger</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:var(--orange)">API</div><div><div class="flow-source">Traffic + Weather APIs</div><div class="flow-detail">Commute slowdowns, rain, and local conditions that affect ETA and meal choice</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Pipeline Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time</span></div>
+<div class="data-row"><span class="data-label">App event lag</span><span class="data-value teal">&lt;80ms</span></div>
+<div class="data-row"><span class="data-label">Menu + pricing freshness</span><span class="data-value teal">Streaming</span></div>
+<div class="data-row"><span class="data-label">ETA refresh cadence</span><span class="data-value teal">Sub-second</span></div>
+<div class="data-row"><span class="data-label">Queue state</span><span class="data-value teal">Live</span></div>
+<div class="data-row"><span class="data-label">Online feature pipeline</span><span class="data-value teal">Continuous</span></div>
+<div class="data-row"><span class="data-label">Ordered event handoff</span><span class="data-value teal">Guaranteed by Streams</span></div>
+</div>
+<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(218,41,28,.05);border:1px solid rgba(218,41,28,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Operational point:</strong> app intent, kitchen state, and drive-thru arrival live on the same timeline. The crew tablet and the app can now react to the same event sequence.</div>
+</div>
+</div></div>
+
+<!-- STAGE 4 -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Redis Context Surfaces assemble guest history and live restaurant state</div><div class="stage-subtitle">The best breakfast offer depends on both who Jasmine is and what the restaurant can handle right now. Redis fuses guest profile, value behavior, ETA, queue load, and availability into one live decision package.</div><span class="component-tag">Redis Context Surfaces</span><span class="component-tag">Guest History</span><span class="component-tag">Live Restaurant State</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Historical Guest Profile</div>
+<div style="margin-bottom:14px">
+<div class="data-label" style="margin-bottom:8px;font-size:12px">Daypart Affinity Distribution</div>
+<div class="daypart-bar"><div style="width:54%;background:var(--yellow)"></div><div style="width:28%;background:var(--blue)"></div><div style="width:18%;background:var(--amber)"></div></div>
+<div class="daypart-label"><span>Breakfast 54%</span><span>Lunch 28%</span><span>Dinner 18%</span></div>
+</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Loyalty tenure</span><span class="data-value">Member since 2023</span></div>
+<div class="data-row"><span class="data-label">Breakfast visit cadence</span><span class="data-value yellow">3 visits in last 7 days</span></div>
+<div class="data-row"><span class="data-label">Favorite pattern</span><span class="data-value">Egg McMuffin, Hash Browns, Coffee</span></div>
+<div class="data-row"><span class="data-label">Value response</span><span class="data-value amber">Strong on breakfast meal deals</span></div>
+<div class="data-row"><span class="data-label">Points behavior</span><span class="data-value">Redeems above 3,000 pts</span></div>
+<div class="data-row"><span class="data-label">Store preference</span><span class="data-value">Route 59 Drive-Thru</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Live Session + Restaurant Context</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">ETA to store</span><span class="data-value teal">7 minutes</span></div>
+<div class="data-row"><span class="data-label">Queue load</span><span class="data-value amber">3 cars ahead</span></div>
+<div class="data-row"><span class="data-label">Kitchen cycle time</span><span class="data-value">68 sec average</span></div>
+<div class="data-row"><span class="data-label">Breakfast daypart</span><span class="data-value teal">Open until 10:30 AM</span></div>
+<div class="data-row"><span class="data-label">McValue breakfast eligibility</span><span class="data-value yellow">Available now</span></div>
+<div class="data-row"><span class="data-label">Weather + commute</span><span class="data-value blue">Light rain, slower arrival</span></div>
+</div>
+<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--teal)">Context signal:</strong> Jasmine is value-oriented, in a repeat breakfast moment, close enough for ETA-aware prep, and the restaurant has capacity to stage a fast handoff. That makes this both a guest decision and an operations decision.</div>
+</div>
+</div></div>
+
+<!-- STAGE 5 -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrate in sub-millisecond time</div><div class="stage-subtitle">The ranking model pulls guest, restaurant, and ETA features from the same operational surface. No second pipeline, no stale restaurant state, and no wait on point-in-time joins during checkout.</div><span class="component-tag">Real-Time Feature Store</span><span class="component-tag">Featureform</span></div>
+<div class="viz-area" style="flex-direction:column;gap:18px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">BREAKFAST_VISIT_FREQ_30D</div><div class="feat-desc">How often Jasmine orders breakfast from McDonald's in the last 30 days</div><div class="feat-value-row"><span class="feat-value">9 visits</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">REORDER_PROPENSITY_SCORE</div><div class="feat-desc">Likelihood of repeating a familiar breakfast path right now</div><div class="feat-value-row"><span class="feat-value">0.91</span><span class="feat-latency">0.3 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">VALUE_SENSITIVITY_INDEX</div><div class="feat-desc">Preference for visible value structures like McValue or meal deals</div><div class="feat-value-row"><span class="feat-value">0.83</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">ETA_TO_ARRIVAL_MIN</div><div class="feat-desc">Live arrival forecast from geofence and traffic data</div><div class="feat-value-row"><span class="feat-value">7</span><span class="feat-latency">0.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">KITCHEN_CYCLE_TIME_SEC</div><div class="feat-desc">Current restaurant prep pace for breakfast items</div><div class="feat-value-row"><span class="feat-value">68 sec</span><span class="feat-latency">0.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">MENU_AVAILABILITY_RISK</div><div class="feat-desc">Probability that the candidate meal needs suppression because of local availability</div><div class="feat-value-row"><span class="feat-value">0.06</span><span class="feat-latency">0.3 ms</span></div></div>
+</div>
+<div class="viz-panel" style="flex:0"><div class="viz-panel-title">Serving Performance</div>
+<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Features Hydrated</div><div style="font-size:26px;font-weight:700;color:var(--text);font-family:var(--mono)">42</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Feature Lookup</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">0.8 ms</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Hybrid Query</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">2.4 ms</div></div>
+<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Train / Serve Parity</div><div style="font-size:26px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- STAGE 6 -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Ranking</div><div class="stage-title">Hybrid Search ranks the next best meal</div><div class="stage-subtitle">Redis combines meal similarity with real business filters in one query. Daypart, local inventory, price band, ETA fit, and prep time all stay inside the same ranking flow.</div><span class="component-tag">Vector Search</span><span class="component-tag">Hybrid Search</span><span class="component-tag">Rules Engine</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">32 breakfast candidates</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,199,44,.06);border:1px solid rgba(255,199,44,.15);font-size:12px;color:var(--yellow)">Filters: breakfast, local store, under $6, ETA fit</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(218,41,28,.06);border:1px solid rgba(218,41,28,.12);font-size:12px;color:var(--red)">13 suppressed by daypart, availability, prep-time guardrails</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 3 ranked</div>
+</div>
+<div class="content-grid">
+<div class="content-card winner"><div class="content-rank">#1 Winning Offer</div><div class="content-source src-value">McValue</div><div class="content-title">$4 Breakfast Meal Deal</div><div class="content-meta">Sausage McMuffin, Hash Browns, Small Coffee | 96% fit</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Matches Jasmine's price sensitivity, stays inside breakfast filters, and fits the restaurant's current prep window for Ready on Arrival timing.</div><div class="score-bar"><div class="score-fill" style="--score:96%;background:var(--teal)"></div></div><div class="score-label"><span>Rank score</span><span style="color:var(--teal)">0.96</span></div></div>
+<div class="content-card"><div class="content-rank">#2 Habit Path</div><div class="content-source src-reorder">One-Tap Reorder</div><div class="content-title">Egg McMuffin Breakfast Repeat</div><div class="content-meta">Recent favorite | 91% fit</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Strong behavioral match, but the current value path is better aligned with today's breakfast decision and public value positioning.</div><div class="score-bar"><div class="score-fill" style="--score:91%;background:var(--blue)"></div></div><div class="score-label"><span>Rank score</span><span style="color:var(--blue)">0.91</span></div></div>
+<div class="content-card"><div class="content-rank">#3 Loyalty Path</div><div class="content-source src-rewards">Rewards</div><div class="content-title">Points Redemption Add-On</div><div class="content-meta">Hash Browns and Coffee with points | 86% fit</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Good loyalty moment, but it builds a smaller basket than the breakfast meal deal and is less clear for a hurry-up morning routine.</div><div class="score-bar"><div class="score-fill" style="--score:86%;background:var(--purple)"></div></div><div class="score-label"><span>Rank score</span><span style="color:var(--purple)">0.86</span></div></div>
+</div>
+</div></div>
+
+<!-- STAGE 7 -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Business Optimization</div><div class="stage-title">One decision balances conversion, value, and throughput</div><div class="stage-subtitle">The winner is not just the meal Jasmine is likely to buy. It is the meal and prep timing that fit the restaurant's current state, the value narrative McDonald's is pushing, and the loyalty outcome McDonald's wants to reinforce.</div><span class="component-tag">Ready on Arrival</span><span class="component-tag">Redis Streams</span><span class="component-tag">Active-Active</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Decision Logic</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Winning decision</span><span class="data-value yellow">$4 Breakfast Meal Deal</span></div>
+<div class="data-row"><span class="data-label">Prep trigger</span><span class="data-value teal">Ready on Arrival at T-3 min</span></div>
+<div class="data-row"><span class="data-label">Queue guardrail</span><span class="data-value">No candidates above 90 sec prep cycle</span></div>
+<div class="data-row"><span class="data-label">Suppression rules</span><span class="data-value">Lunch offers, unavailable items, slow-prep bundles</span></div>
+<div class="data-row"><span class="data-label">Loyalty lever</span><span class="data-value">Points surfaced up front, not buried at checkout</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> a value decision only works if restaurant execution agrees with it. Redis turns guest relevance and restaurant readiness into one decision, then uses Streams to keep the app, the crew tablet, and the kitchen aligned as Jasmine approaches the store.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Public Proof Points</div>
+<div class="proof-grid">
+<div class="proof-card"><div class="proof-label">Ready on Arrival</div><div class="proof-value teal">50%+ shorter wait</div><div class="proof-copy">McDonald's says Ready on Arrival can reduce customer wait times by more than 50% by starting prep as the guest approaches the restaurant.</div></div>
+<div class="proof-card"><div class="proof-label">Loyalty Behavior</div><div class="proof-value yellow">Visits more than double</div><div class="proof-copy">In the U.S., customers who join MyMcDonald's loyalty more than double their visits in the first year after joining.</div></div>
+<div class="proof-card"><div class="proof-label">Loyalty Scale</div><div class="proof-value amber">Nearly $37B</div><div class="proof-copy">Systemwide sales to loyalty members reached nearly $37 billion in 2025 across 70 loyalty markets.</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- STAGE 8 -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Same app. Better meal decision. Faster handoff.</div><div class="stage-subtitle">The layout does not change. The decision inside the layout changes. Redis uses the same app surface to show a breakfast path that fits Jasmine and a prep path that fits the store.</div></div>
+<div class="outcome-split">
+<div class="outcome-col">
+<div class="outcome-header generic">Generic Experience</div>
+<div class="mcd-screen">
+<div class="mcd-statusbar"><span>7:18</span><span>&#x1F50B;</span></div>
+<div class="mcd-header generic-head"><div class="mcd-logo">MCD</div><div class="mcd-greeting">Good morning</div></div>
+<div class="mcd-hero" style="background:linear-gradient(135deg,#1a1a1a,#0f0f0f)">
+<div class="mcd-hero-tag" style="color:var(--text3)">FEATURED</div>
+<div class="mcd-hero-title" style="color:var(--text2)">Breakfast Favorites</div>
+<div class="mcd-hero-desc">Static breakfast tiles for every guest</div>
+<div class="mcd-hero-btn" style="background:transparent;border-color:var(--text3);color:var(--text3)">Browse Menu</div>
+</div>
+<div class="mcd-row"><div class="mcd-row-title" style="color:var(--text3)">Value Picks</div>
+<div class="mcd-tiles">
+<div class="mcd-tile" style="background:#2a1a1a;color:var(--text3)">Sausage Biscuit<div class="tile-source">$3.19</div></div>
+<div class="mcd-tile" style="background:#1a2a1a;color:var(--text3)">Hash Browns<div class="tile-source">$2.79</div></div>
+<div class="mcd-tile" style="background:#1a1a2a;color:var(--text3)">McCafe Coffee<div class="tile-source">$1.99</div></div>
+</div></div>
+<div class="mcd-order-card"><div class="mcd-order-top"><div class="mcd-order-title" style="color:var(--text3)">Drive-Thru Handoff</div><div class="mcd-order-pill" style="background:rgba(255,255,255,.06);color:var(--text3)">STANDARD</div></div><div style="font-size:11px;color:var(--text2);line-height:1.5">Prep begins after checkout. Points appear later in flow. Restaurant sees intent only after the order is committed.</div></div>
+</div>
+<div class="outcome-metrics generic-m">
+<div class="outcome-metric"><div class="outcome-metric-value">Static</div><div class="outcome-metric-label">Value path</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">At submit</div><div class="outcome-metric-label">Prep trigger</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">Standard</div><div class="outcome-metric-label">Wait</div></div>
+</div>
+</div>
+<div class="outcome-col">
+<div class="outcome-header personalized">Redis-Personalized Experience</div>
+<div class="mcd-screen" style="border-color:rgba(0,201,167,.35)">
+<div class="mcd-statusbar"><span>7:18</span><span>&#x1F50B;</span></div>
+<div class="mcd-header"><div class="mcd-logo">MCD</div><div class="mcd-greeting">Hi Jasmine</div></div>
+<div class="mcd-hero" style="background:linear-gradient(135deg,#2a0f08,#1a0904)">
+<div class="mcd-hero-tag" style="color:var(--yellow)">YOUR MORNING ROUTINE</div>
+<div class="mcd-hero-title" style="color:#fff">$4 Breakfast Meal Deal</div>
+<div class="mcd-hero-desc">Sausage McMuffin, Hash Browns, Small Coffee | best fit for this commute</div>
+<div class="mcd-hero-btn">Order Now</div>
+</div>
+<div class="mcd-row"><div class="mcd-row-title">Why this surfaced</div>
+<div class="mcd-tiles">
+<div class="mcd-tile" style="background:linear-gradient(135deg,#2a0f08,#1a0904);color:#fff;border:1px solid rgba(255,199,44,.25)">McValue breakfast<div class="tile-source" style="color:var(--yellow)">VALUE</div></div>
+<div class="mcd-tile" style="background:linear-gradient(135deg,#081a2a,#041018);color:#fff;border:1px solid rgba(79,140,255,.25)">3,240 points ready<div class="tile-source" style="color:var(--blue)">LOYALTY</div></div>
+<div class="mcd-tile" style="background:linear-gradient(135deg,#081a12,#04100a);color:#fff;border:1px solid rgba(0,201,167,.25)">ETA 7 min<div class="tile-source" style="color:var(--teal)">ARRIVAL</div></div>
+</div></div>
+<div class="mcd-order-card" style="background:rgba(0,201,167,.05);border-color:rgba(0,201,167,.18)"><div class="mcd-order-top"><div class="mcd-order-title" style="color:var(--teal)">Ready on Arrival</div><div class="mcd-order-pill" style="background:rgba(0,201,167,.12);color:var(--teal)">ETA-AWARE</div></div><div style="font-size:11px;color:var(--text2);line-height:1.5">Drive-thru check-in happens automatically. Prep starts at T-3 minutes so the order is fresher at handoff and faster through the lane.</div></div>
+</div>
+<div class="outcome-metrics personalized-m">
+<div class="outcome-metric"><div class="outcome-metric-value">Contextual</div><div class="outcome-metric-label">Value path</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">ETA-aware</div><div class="outcome-metric-label">Prep trigger</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">50%+</div><div class="outcome-metric-label">Wait-time lever</div></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- STAGE 9 -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: Architecture Recap</div><div class="stage-title">Nine stages. One guest-plus-restaurant context layer.</div><div class="stage-subtitle">This same stack maps to McDonald's current priorities: loyalty at global scale, value-led engagement, Ready on Arrival, Edge in hundreds of U.S. restaurants, and Accuracy Scales across thousands of drive-thru and delivery locations.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>MyMcDonald's App</h4><p>Search, cart, favorites, check-in</p></div>
+<div class="arch-node"><h4>Loyalty + Offers</h4><p>Points, eligibility, redemptions</p></div>
+<div class="arch-node"><h4>POS + Menu + Inventory</h4><p>Availability, pricing, daypart</p></div>
+<div class="arch-node"><h4>Restaurant Edge + KDS</h4><p>Queue, kitchen load, lane state</p></div>
+<div class="arch-node"><h4>Traffic + Weather APIs</h4><p>ETA, commute, local conditions</p></div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration</h4><p>Fresh menu, offers, and restaurant state</p></div>
+<div class="arch-node"><h4>Redis Streams</h4><p>Ordered app-to-restaurant events</p></div>
+<div class="arch-node"><h4>Featureform</h4><p>Feature engineering and online serving</p></div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(218,41,28,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Surfaces</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis RAM</h4><p>Hot session state and ETA updates</p></div>
+<div class="arch-node"><h4>Redis Flex</h4><p>Guest history and warm context</p></div>
+<div class="arch-node"><h4>Real-Time Feature Store</h4><p>Sub-ms feature hydration</p></div>
+<div class="arch-node"><h4>Active-Active</h4><p>Global low-latency continuity</p></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Guest 360</div>
+<div class="arch-data-chip">ETA</div>
+<div class="arch-data-chip">Queue</div>
+<div class="arch-data-chip">Inventory</div>
+<div class="arch-data-chip">Points</div>
+<div class="arch-data-chip">Session State</div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Rules + Policy</h4><p>Daypart, availability, guardrails</p></div>
+<div class="arch-node"><h4>Vector Search</h4><p>Meal and behavior similarity</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Vector plus filters in one query</p></div>
+<div class="arch-node"><h4>Next Best Meal Ranker</h4><p>Conversion, value, and throughput</p></div>
+</div></div>
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Mobile App</h4><p>Personalized value and one-tap order</p></div>
+<div class="arch-node"><h4>Drive-Thru + Ready on Arrival</h4><p>ETA-aware prep timing</p></div>
+<div class="arch-node"><h4>Kitchen Display + Crew Tablet</h4><p>Prep trigger and handoff timing</p></div>
+<div class="arch-node"><h4>CRM + Offers</h4><p>Loyalty follow-up and measurement</p></div>
+</div></div>
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; order_complete and queue telemetry &rarr; streams &rarr; analytics and model refresh &rarr; updated features and rules &rarr; redeployed to Redis</span></div>
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Loyalty Sales</div><div class="arch-callout-value yellow">Nearly $37B in 2025</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Loyalty Users</div><div class="arch-callout-value teal">Nearly 210M active</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Restaurant Tech</div><div class="arch-callout-value amber">Edge + Accuracy at scale</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<10ms','0.3ms','1.6ms','3.2ms','5.0ms','7.4ms','8.1ms','8.6ms','8.6ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
