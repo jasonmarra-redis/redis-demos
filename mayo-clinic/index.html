@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Iris Demo | Mayo Clinic Office of CTO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
+  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
+  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
+  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
+  --orange:#F97316;
+  --mayo-blue:#0067B1;--mayo-light:#5BA9DE;--clinical:#7AC4A8;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
+.topbar-divider{width:1px;height:24px;background:var(--border)}
+.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
+.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.latency-value{color:var(--teal)}
+.latency-label{color:var(--text3);font-size:11px}
+.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
+.iris-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:6px;background:linear-gradient(135deg,rgba(220,56,44,.18),rgba(0,201,167,.12));border:1px solid rgba(220,56,44,.25);font-family:var(--mono);font-size:11px;font-weight:700;color:#fff;letter-spacing:.5px}
+.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
+.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
+.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
+.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
+.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
+.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
+.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
+.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
+.stage-content.active{display:flex;flex-direction:column}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.stage-header{margin-bottom:32px}
+.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
+.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
+.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
+.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
+.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
+.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
+.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
+.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:880px}
+.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
+.component-tag.iris{background:linear-gradient(135deg,rgba(220,56,44,.12),rgba(0,201,167,.1));color:#fff;border-color:rgba(220,56,44,.25)}
+.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
+.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
+.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
+.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
+.data-rows{display:flex;flex-direction:column;gap:9px}
+.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
+.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}.data-row:nth-child(8){animation-delay:.66s}
+@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.data-label{font-size:13px;color:var(--text2);font-weight:500}
+.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
+.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
+.flow-container{display:flex;flex-direction:column;gap:12px}
+.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
+.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
+@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.flow-icon{width:44px;height:44px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
+.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px;line-height:1.4}
+.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
+@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
+.viewer-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
+.viewer-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--mayo-blue),var(--mayo-light));display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
+.viewer-name{font-size:17px;font-weight:700}.viewer-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.viewer-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(0,103,177,.15);color:var(--mayo-light);border:1px solid rgba(0,103,177,.3)}
+/* Content cards for ranking */
+.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
+.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
+@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.content-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
+.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
+.content-card.winner .content-rank{color:var(--teal)}
+.content-title{font-size:15px;font-weight:700;margin-bottom:4px;line-height:1.3}
+.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
+.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
+@keyframes scoreFill{to{width:var(--score)}}
+.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
+/* Impact stage */
+.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
+.rev-card{padding:22px;border-radius:12px;text-align:center}
+.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
+.rev-value{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px}
+.rev-label{font-size:12px;color:var(--text3)}
+.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
+/* Architecture */
+.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
+.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
+.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
+.arch-tier{position:relative;z-index:2}
+.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;display:flex;align-items:center;gap:10px}
+.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
+.arch-node:hover{transform:translateY(-2px)}
+.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
+.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
+.tier-source .arch-tier-label{color:var(--text3)}
+.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
+.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
+.tier-source .arch-node h4{color:#D8DCE4}
+.tier-source .arch-node p{color:var(--text3)}
+.tier-ingest .arch-tier-label{color:#FF8B6A}
+.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
+.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
+.tier-ingest .arch-node h4{color:#FF8B6A}
+.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
+.tier-context .arch-tier-label{color:var(--teal)}
+.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
+.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
+.tier-context .arch-node h4{color:#5EECC8}
+.tier-context .arch-node p{color:rgba(94,236,200,.55)}
+.tier-context-storage{display:flex;gap:10px;margin-top:10px}
+.storage-band{flex:1;padding:10px 14px;border-radius:8px;border:1px solid;font-size:11px;display:flex;align-items:center;gap:10px}
+.storage-band.ram{background:rgba(220,56,44,.06);border-color:rgba(220,56,44,.18);color:#FFB099}
+.storage-band.flex{background:rgba(79,140,255,.05);border-color:rgba(79,140,255,.18);color:#9BC2FF}
+.storage-band-tag{font-family:var(--mono);font-size:9px;font-weight:800;padding:3px 7px;border-radius:4px;letter-spacing:.5px}
+.ram .storage-band-tag{background:rgba(220,56,44,.18);color:#FF8B6A}
+.flex .storage-band-tag{background:rgba(79,140,255,.18);color:var(--blue)}
+.storage-band-text{font-family:var(--mono);font-size:10.5px;opacity:.85;line-height:1.4}
+.tier-decide .arch-tier-label{color:var(--amber)}
+.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
+.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
+.tier-decide .arch-node h4{color:var(--amber)}
+.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
+.tier-act .arch-tier-label{color:var(--blue)}
+.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
+.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
+.tier-act .arch-node h4{color:#7FADFF}
+.tier-act .arch-node p{color:rgba(127,173,255,.55)}
+.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
+.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
+.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
+.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
+.arch-data-chip:last-child{border-right:none}
+.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
+.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
+.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
+.arch-callout-value.teal{color:var(--teal)}
+.arch-callout-value.orange{color:var(--orange)}
+.arch-callout-value.amber{color:var(--amber)}
+.iris-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:5px;font-family:var(--mono);font-size:9.5px;font-weight:700;background:linear-gradient(135deg,rgba(220,56,44,.18),rgba(0,201,167,.14));border:1px solid rgba(220,56,44,.25);color:#fff;letter-spacing:.5px}
+/* Feature serving */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
+.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.2s}.feat-card:nth-child(3){animation-delay:.3s}.feat-card:nth-child(4){animation-delay:.4s}.feat-card:nth-child(5){animation-delay:.5s}.feat-card:nth-child(6){animation-delay:.6s}
+.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);margin-bottom:4px;letter-spacing:.5px}
+.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
+.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
+.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
+.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
+/* Clinical brief mockup */
+.brief-screen{background:#0E1118;border-radius:14px;border:1px solid rgba(255,255,255,.06);overflow:hidden;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.brief-statusbar{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;font-size:11px;color:var(--text2);font-family:var(--mono);font-weight:600;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
+.brief-header{padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,.04);background:linear-gradient(180deg,rgba(0,103,177,.06),transparent)}
+.brief-app{font-size:13px;font-weight:800;color:#fff;letter-spacing:.5px;font-family:var(--mono)}
+.generic-head .brief-app{color:var(--text3)}
+.brief-patient{font-size:11px;font-weight:600;color:var(--text2)}
+.brief-body{padding:18px 20px;font-size:12px;line-height:1.55;color:var(--text2)}
+.brief-body.generic{color:var(--text3);font-family:var(--mono);font-size:10.5px;line-height:1.65;max-height:340px;overflow:hidden;position:relative}
+.brief-body.generic::after{content:'';position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(180deg,transparent,#0E1118)}
+.brief-section{margin-bottom:14px}
+.brief-section-title{font-family:var(--mono);font-size:9.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--mayo-light);margin-bottom:6px}
+.brief-section.alert .brief-section-title{color:var(--amber)}
+.brief-section.recommend .brief-section-title{color:var(--teal)}
+.brief-line{padding:6px 10px;border-radius:6px;background:rgba(255,255,255,.025);border:1px solid var(--border);margin-bottom:5px;display:flex;align-items:flex-start;gap:8px;font-size:11.5px;color:var(--text)}
+.brief-line .dot{width:5px;height:5px;border-radius:50%;background:var(--mayo-light);margin-top:7px;flex-shrink:0}
+.brief-section.alert .brief-line{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.18)}
+.brief-section.alert .brief-line .dot{background:var(--amber)}
+.brief-section.recommend .brief-line{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.18)}
+.brief-section.recommend .brief-line .dot{background:var(--teal)}
+.brief-provenance{font-family:var(--mono);font-size:9px;color:var(--text3);margin-left:auto;flex-shrink:0;letter-spacing:.3px}
+.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.outcome-col{display:flex;flex-direction:column;gap:14px}
+.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
+.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
+.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
+.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
+.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
+.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
+.outcome-metric{flex:1;text-align:center}
+.outcome-metric-value{font-family:var(--mono);font-size:22px;font-weight:700;line-height:1}
+.generic-m .outcome-metric-value{color:var(--text3)}
+.personalized-m .outcome-metric-value{color:var(--teal)}
+.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
+/* Iris pillars */
+.pillar-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+.pillar-card{padding:14px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
+.pillar-num{font-family:var(--mono);font-size:9px;font-weight:700;color:var(--red);letter-spacing:1px;margin-bottom:6px}
+.pillar-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;line-height:1.3}
+.pillar-desc{font-size:11px;color:var(--text3);line-height:1.5}
+/* Nav */
+.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
+.nav-hint{font-size:13px;color:var(--text3)}
+.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
+.nav-buttons{display:flex;gap:12px}
+.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
+.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.nav-btn.next{background:var(--red);color:#fff}
+.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
+.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.nav-btn.restart{background:var(--teal);color:#fff}
+.nav-btn.restart:hover{background:#00a88b}
+@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.pillar-grid{grid-template-columns:1fr 1fr}.progress-step span{display:none}}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Iris Demo | Mayo Clinic Office of CTO</div><div class="iris-badge">POWERED BY REDIS IRIS</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Context</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
+<div class="progress-track" id="progressTrack">
+<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
+<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Trigger</span></div>
+<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
+<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context Assembly</span></div>
+<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Context Retrieval</span></div>
+<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Reasoning</span></div>
+<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Clinical Impact</span></div>
+<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
+<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+</div>
+
+<div class="stage-viewport">
+
+<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
+<div class="stage-content active" id="stage0">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">Mayo Clinic's Clinical Agent Context Engine</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, reason, act, learn. Epic, interop feeds, scanned outside records, and live HL7 telemetry flow into Redis Iris. Iris assembles the right patient context at the right moment and hands it to the clinical reasoning agent. The clinician workstation renders. Every agent interaction across the Patient In Front Of Me workflow draws from one unified context engine, with longitudinal depth on flash and live signals in memory.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources (Provenance)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Epic EHR</h4><p>System of record across all campuses</p></div>
+<div class="arch-node"><h4>HL7 / FHIR Streams</h4><p>Orders, results, telemetry, vitals</p></div>
+<div class="arch-node"><h4>Outside Records (CCD/XML)</h4><p>Interop feeds, scanned documents</p></div>
+<div class="arch-node"><h4>Mayo Advanced Data Lake</h4><p>OMOP-formatted longitudinal records</p></div>
+<div class="arch-node"><h4>Imaging Metadata</h4><p>Radiology, pathology, omics signals</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from Epic Clarity, advanced data lake, sub-second sync</p></div>
+<div class="arch-node"><h4>Redis Streams</h4><p>Live HL7 telemetry, result events, order state changes</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Iris Context Tier <span class="iris-pill">REAL-TIME CONTEXT ENGINE</span></div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Agent Memory</h4><p>Working + long-term + episodic recall across encounters</p></div>
+<div class="arch-node"><h4>Context Retriever</h4><p>Schema-first navigable paths over patient entities</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Filter + vector in one query, regulated-safe</p></div>
+<div class="arch-node"><h4>Semantic Caching</h4><p>LangCache for repeated clinical queries</p></div>
+</div>
+<div class="tier-context-storage">
+<div class="storage-band ram"><span class="storage-band-tag">RAM</span><span class="storage-band-text">Hot: today's labs, live vitals, active orders, current meds, allergy flags, in-encounter state</span></div>
+<div class="storage-band flex"><span class="storage-band-tag">FLEX</span><span class="storage-band-text">Warm: longitudinal record, prior outside records, imaging metadata, multi-year trajectories</span></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Patient Entity Graph</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Embeddings</div>
+<div class="arch-data-chip">Encounter State</div>
+<div class="arch-data-chip">Provenance Tags</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Clinical Reasoning Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Clinical Rules</h4><p>Contraindications, allergies, eligibility</p></div>
+<div class="arch-node"><h4>Reasoning Agent (LLM)</h4><p>Vertex AI / Gemini, evidence-grounded</p></div>
+<div class="arch-node"><h4>Similar-Patient Cohort</h4><p>Hybrid retrieval over outcomes</p></div>
+<div class="arch-node"><h4>Knowledge Augmentation</h4><p>Guidelines, ontologies, protocols</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Clinician Workstation</h4><p>Patient In Front Of Me brief</p></div>
+<div class="arch-node"><h4>Epic In-Context Panel</h4><p>SMART on FHIR embedded</p></div>
+<div class="arch-node"><h4>Inpatient Rounding App</h4><p>Mobile, OR, ED surfaces</p></div>
+<div class="arch-node"><h4>Specialty Agents</h4><p>Endocrine, anesthesia, oncology</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Clinician attestation &rarr; Agent Memory enrichment &rarr; Updated cohort embeddings &rarr; Redeployed to Iris context tier</span></div>
+
+</div>
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Context Assembly (P95)</div><div class="arch-callout-value teal">&lt;250 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Data Freshness Lag</div><div class="arch-callout-value orange">&lt;2 sec end-to-end</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Deployment</div><div class="arch-callout-value amber">GCP-native / BYOC in Mayo VPC</div></div>
+</div>
+</div>
+</div>
+
+<!-- ══ STAGE 2: TRIGGER / ENCOUNTER START ══ -->
+<div class="stage-content" id="stage1">
+<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Encounter Trigger</div><div class="stage-title">Dr. Elena Vasquez prepares for her first patient</div><div class="stage-subtitle">7:42 AM Tuesday, Mayo Rochester. Dr. Vasquez opens the Patient In Front Of Me workspace ahead of her 9:00 AM endocrine panel. First slot: a 58-year-old returning patient with a 12-year Type 2 diabetes history, new labs back overnight that suggest progressing renal involvement. The clinical agent is asked to prepare. Iris assembles context before the workstation finishes loading.</div></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Encounter Context</div>
+<div class="viewer-card"><div class="viewer-avatar">EV</div><div><div class="viewer-name">Dr. Elena Vasquez, MD</div><div class="viewer-detail">Endocrinology &middot; Mayo Clinic Rochester &middot; 9:00 AM panel of 14 patients</div></div><div class="viewer-badge">CLINICIAN</div></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Event</span><span class="data-value">encounter_prep_requested</span></div>
+<div class="data-row"><span class="data-label">Workflow</span><span class="data-value orange">Patient In Front Of Me (outpatient follow-up)</span></div>
+<div class="data-row"><span class="data-label">Patient MRN (de-identified)</span><span class="data-value">MAYO-RST-8847291</span></div>
+<div class="data-row"><span class="data-label">Patient profile</span><span class="data-value">58F, Type 2 DM x 12 years, hypertension, prior nephrology consult 2022</span></div>
+<div class="data-row"><span class="data-label">New since last visit</span><span class="data-value teal">Overnight labs back 18 min ago: eGFR 47, microalbumin elevated</span></div>
+<div class="data-row"><span class="data-label">Outside records on file</span><span class="data-value">3 CCD imports from referring system, last received 14 days ago</span></div>
+<div class="data-row"><span class="data-label">Care setting</span><span class="data-value amber">Outpatient (changes freshness profile)</span></div>
+<div class="data-row"><span class="data-label">Prep time available</span><span class="data-value red">Under 2 minutes before next patient</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">The Problem In Plain Terms</div>
+<div style="display:flex;flex-direction:column;gap:16px;margin-top:4px">
+<div style="font-size:13px;color:var(--text2);line-height:1.6">A complex follow-up like this requires synthesizing <strong style="color:var(--orange)">12 years of longitudinal data</strong> across Epic, scanned outside records, interop feeds, and overnight telemetry. The decision-grade question, <em>"how is the diabetes trajectory affecting renal function and what regimen change is indicated,"</em> is buried in thousands of data points.</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6">The <strong style="color:var(--amber)">veracity, depth, and freshness</strong> of each data element varies. BMI is stale the moment it's recorded. Diagnoses persist for decades. Last night's eGFR is fresh and decisive. Each piece needs the right hydration policy or the agent will reason on stale signal.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(0,103,177,.06);border:1px solid rgba(0,103,177,.18);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--mayo-light)">The Iris job:</strong> Assemble the patient's longitudinal entity graph, overlay live signals, and hand the reasoning agent a clean, provenance-tagged context package in under 250 ms.</div>
+<div style="padding:14px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--text3)">Without Iris:</strong> Each agent stitches its own context from raw Epic queries, slow OMOP joins, and stale embeddings. Sub-second freshness is not achievable. The 2-minute prep window becomes 12.</div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 3: INGEST ══ -->
+<div class="stage-content" id="stage2">
+<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">Source systems flow into Iris</div><div class="stage-subtitle">RDI captures changes from Epic Clarity and the advanced data lake continuously. Redis Streams ingests live HL7 result and order events as they fire. Outside records, scanned CCD imports, and imaging metadata land on the same plane. Iris keeps state fresh end-to-end in under 2 seconds.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Redis Streams</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Iris</div>
+<div class="flow-container">
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,103,177,.18);color:#5BA9DE">EPIC</div><div><div class="flow-source">Epic EHR (Clarity) &middot; System of Record</div><div class="flow-detail">Structured patient record | Problem list | Med list | Encounter notes | Active orders | Diagnoses</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">HL7</div><div><div class="flow-source">HL7 / FHIR Event Streams</div><div class="flow-detail">Lab results in flight | Vitals from telemetry | Order state changes | ADT events | Allergy updates</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">CCD</div><div><div class="flow-source">Outside Records &middot; CCD / XML Interop</div><div class="flow-detail">Referring system records | Network hospital feeds | Document AI on scanned imports | TEFCA exchange</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(91,169,222,.15);color:#5BA9DE">LAKE</div><div><div class="flow-source">Mayo Advanced Data Lake &middot; OMOP</div><div class="flow-detail">Interoperable representation | 20+ year longitudinal records | De-identified research overlays | Embeddings</div></div><div class="flow-arrow">&rarr;</div></div>
+<div class="flow-item"><div class="flow-icon" style="background:rgba(249,115,22,.12);color:var(--orange)">IMG</div><div><div class="flow-source">Imaging &amp; Pathology Metadata</div><div class="flow-detail">Radiology report finals | Pathology slide metadata | Omics annotations | Report-level embeddings</div></div><div class="flow-arrow">&rarr;</div></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Iris Ingestion Status</div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">RDI CDC mode</span><span class="data-value teal">Real-time, exactly-once</span></div>
+<div class="data-row"><span class="data-label">Epic Clarity lag</span><span class="data-value teal">1.4 sec P95</span></div>
+<div class="data-row"><span class="data-label">HL7 event ingest</span><span class="data-value teal">Under 800 ms result-to-Iris</span></div>
+<div class="data-row"><span class="data-label">CCD parse + index</span><span class="data-value amber">3.2 sec for new import</span></div>
+<div class="data-row"><span class="data-label">Source systems untouched</span><span class="data-value">Epic remains system of record</span></div>
+<div class="data-row"><span class="data-label">PHI handling</span><span class="data-value">HIPAA-aligned, BYOC in Mayo VPC</span></div>
+<div class="data-row"><span class="data-label">Throughput (peak)</span><span class="data-value">12.4K events/sec institution-wide</span></div>
+<div class="data-row"><span class="data-label">Freshness policy per element</span><span class="data-value blue">Tunable: BMI stale, eGFR fresh</span></div>
+</div></div>
+</div></div>
+
+<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
+<div class="stage-content" id="stage3">
+<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Iris assembles the patient entity graph</div><div class="stage-subtitle">Longitudinal profile draws from Flex, the warm tier. Live signals draw from RAM. Agent Memory binds them into a navigable graph of patient, conditions, regimens, events, and outcomes. The agent sees one patient, not five disconnected systems, with provenance preserved on every element.</div><span class="component-tag iris">Iris Agent Memory</span><span class="component-tag iris">Iris Context Retriever</span></div>
+<div class="viz-area">
+<div class="viz-panel"><div class="viz-panel-title">Longitudinal Profile <span style="float:right;font-family:var(--mono);font-size:9px;color:var(--blue);font-weight:700;letter-spacing:.5px">FLEX TIER</span></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Type 2 DM dx date</span><span class="data-value">Mar 2013 (age 46)</span></div>
+<div class="data-row"><span class="data-label">A1C trajectory (12yr)</span><span class="data-value amber">7.1 &rarr; 8.4 &rarr; 7.9 &rarr; 8.6 today</span></div>
+<div class="data-row"><span class="data-label">Regimen history</span><span class="data-value">Metformin &rarr; +Glipizide &rarr; +Insulin glargine (2019)</span></div>
+<div class="data-row"><span class="data-label">Adherence inference</span><span class="data-value orange">Fill gaps in 2023 Q3, Q4</span></div>
+<div class="data-row"><span class="data-label">Prior nephrology consult</span><span class="data-value">Oct 2022 (eGFR 62, stable then)</span></div>
+<div class="data-row"><span class="data-label">Outside cardiology (CCD)</span><span class="data-value purple">LVH on echo, 2024 referring system</span></div>
+<div class="data-row"><span class="data-label">Family history</span><span class="data-value">Sister: T2DM + dialysis age 61</span></div>
+<div class="data-row"><span class="data-label">Allergies / contraindications</span><span class="data-value red">ACE-inhibitor angioedema 2019</span></div>
+</div></div>
+<div class="viz-panel"><div class="viz-panel-title">Live Signals <span style="float:right;font-family:var(--mono);font-size:9px;color:var(--red);font-weight:700;letter-spacing:.5px">RAM TIER</span></div>
+<div class="data-rows">
+<div class="data-row"><span class="data-label">Labs back overnight</span><span class="data-value teal">eGFR 47, microalbumin 142 mg/g</span></div>
+<div class="data-row"><span class="data-label">Latest A1C</span><span class="data-value amber">8.6% (drawn 2 days ago)</span></div>
+<div class="data-row"><span class="data-label">Active med list</span><span class="data-value">Metformin 1000 BID, glipizide 10, glargine 28u</span></div>
+<div class="data-row"><span class="data-label">BP last 3 readings</span><span class="data-value orange">148/92, 144/88, 152/94</span></div>
+<div class="data-row"><span class="data-label">Pharmacy refill state</span><span class="data-value">All current, last filled 11 days ago</span></div>
+<div class="data-row"><span class="data-label">Open orders</span><span class="data-value">None active</span></div>
+<div class="data-row"><span class="data-label">Encounter state</span><span class="data-value teal">prep_active</span></div>
+<div class="data-row"><span class="data-label">Provenance tags</span><span class="data-value blue">All sources attested, attestable</span></div>
+</div></div>
+</div>
+<div style="margin-top:18px;padding:16px 20px;border-radius:12px;background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15);font-size:13px;color:var(--text2);line-height:1.6"><strong style="color:var(--teal)">Agent Memory bind:</strong> Patient entity &rarr; {conditions: T2DM, HTN, possible CKD stage 3a} &rarr; {regimens: metformin, glipizide, glargine} &rarr; {events: 2022 nephro consult, 2024 outside echo, 2025 fill gap} &rarr; {today: eGFR drop, microalbuminuria, BP uncontrolled}. The graph is navigable. The agent walks it, the agent does not re-derive it.</div>
+</div>
+
+<!-- ══ STAGE 5: CONTEXT RETRIEVAL (FEATURE SERVING) ══ -->
+<div class="stage-content" id="stage4">
+<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Context Retrieval</div><div class="stage-title">Six context elements served to the reasoning agent</div><div class="stage-subtitle">The Context Retriever pulls the exact context the agent needs to reason about this encounter. Each element is hydrated from the right tier, freshness-checked, and tagged with provenance so the clinician can audit any claim back to its source. Train-serve parity reframed for clinical use: what the agent sees matches what Epic shows.</div><span class="component-tag iris">Iris Context Retriever</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div class="feat-grid">
+<div class="feat-card"><div class="feat-name">eGFR_trajectory_24mo</div><div class="feat-desc">Renal function trend, 24 months. Inflection at month 18.</div><div class="feat-value-row"><span class="feat-value">62 &rarr; 54 &rarr; 47</span><span class="feat-latency">1.2 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">microalbumin_status</div><div class="feat-desc">Albuminuria onset confirmed on overnight draw, first elevated reading.</div><div class="feat-value-row"><span class="feat-value">A2, new</span><span class="feat-latency">0.9 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">regimen_adherence_inferred</div><div class="feat-desc">Fill-gap pattern from pharmacy data, refill cadence vs prescribed.</div><div class="feat-value-row"><span class="feat-value">82% trailing 6mo</span><span class="feat-latency">1.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">contraindication_flags</div><div class="feat-desc">Hard-stop flags from problem list + allergy history.</div><div class="feat-value-row"><span class="feat-value red">ACEi angioedema</span><span class="feat-latency">0.7 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">similar_patient_cohort</div><div class="feat-desc">Hybrid retrieval: T2DM + HTN + eGFR decline + ACEi-intolerant.</div><div class="feat-value-row"><span class="feat-value">812 cohort matches</span><span class="feat-latency">2.4 ms</span></div></div>
+<div class="feat-card"><div class="feat-name">outside_record_summary</div><div class="feat-desc">CCD-derived summary of referring system encounters, 24mo.</div><div class="feat-value-row"><span class="feat-value">3 encounters, LVH note</span><span class="feat-latency">1.8 ms</span></div></div>
+</div>
+<div class="viz-panel" style="padding:18px 22px"><div class="viz-panel-title">Retrieval Performance Panel</div>
+<div style="display:flex;gap:30px;align-items:center;padding:6px 0">
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Full context package latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">187 ms</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Context parity (vs Epic source)</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Provenance coverage</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
+<div style="flex:1"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Freshness SLO met</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">Yes</div></div>
+</div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 6: REASONING (RANKING) ══ -->
+<div class="stage-content" id="stage5">
+<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Reasoning &amp; Recommendation</div><div class="stage-title">Three care pathways scored, one surfaced as primary</div><div class="stage-subtitle">Hybrid Search retrieves clinically similar patient journeys: same condition mix, same eGFR decline pattern, ACEi-intolerant cohort. The reasoning agent scores candidate pathways against guidelines, suppresses contraindicated options, and surfaces the highest-evidence recommendation. Semantic Caching absorbs the day's repeated query patterns within budget.</div><span class="component-tag">Hybrid Search</span><span class="component-tag">Semantic Caching</span></div>
+<div class="viz-area" style="flex-direction:column;gap:20px">
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">812 similar-patient matches</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">3 pathways suppressed (ACEi, NSAID, contrast)</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(255,188,87,.06);border:1px solid rgba(255,188,87,.12);font-size:12px;color:var(--amber)">Evidence: ADA 2025, KDIGO 2024 guidelines</div>
+<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 3 surfaced for clinician review</div>
+</div>
+<div class="content-grid">
+<div class="content-card winner"><div class="content-rank">Primary Recommendation</div><div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);background:rgba(0,201,167,.15);color:var(--teal);margin-bottom:10px">REGIMEN CHANGE + REFERRAL</div><div class="content-title">Add SGLT2 inhibitor, refer to nephrology</div><div class="content-meta">Empagliflozin 10 mg daily &middot; Nephrology eConsult &middot; 94% evidence match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Cohort: 812 similar patients, 71% achieved eGFR stabilization at 12 months on SGLT2. Indicated for T2DM with albuminuria and eGFR &gt;30. No contraindications on file. Prior nephro consult on record makes re-referral fast.</div><div class="score-bar"><div class="score-fill" style="--score:94%;background:var(--teal)"></div></div><div class="score-label"><span>Evidence strength</span><span style="color:var(--teal)">94%</span></div></div>
+<div class="content-card"><div class="content-rank">Alternative #2</div><div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);background:rgba(255,188,87,.12);color:var(--amber);margin-bottom:10px">INTENSIFY EXISTING</div><div class="content-title">Add GLP-1 receptor agonist</div><div class="content-meta">Semaglutide titration &middot; 81% evidence match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Strong A1C reduction profile, cardiovascular benefit, but renal benefit less specific than SGLT2 for this presentation. Hold as alternative if SGLT2 contraindicated downstream.</div><div class="score-bar"><div class="score-fill" style="--score:81%;background:var(--amber)"></div></div><div class="score-label"><span>Evidence strength</span><span style="color:var(--amber)">81%</span></div></div>
+<div class="content-card"><div class="content-rank">Alternative #3</div><div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);background:rgba(167,139,250,.12);color:var(--purple);margin-bottom:10px">ARB SUBSTITUTE</div><div class="content-title">Initiate ARB for BP + renal protection</div><div class="content-meta">Losartan, monitor potassium &middot; 76% evidence match</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">BP uncontrolled, ARBs acceptable post-ACEi angioedema with monitoring. Adds renal protection. Complementary to SGLT2 if pursued together.</div><div class="score-bar"><div class="score-fill" style="--score:76%;background:var(--purple)"></div></div><div class="score-label"><span>Evidence strength</span><span style="color:var(--purple)">76%</span></div></div>
+</div>
+<div style="padding:14px 18px;border-radius:10px;background:rgba(220,56,44,.05);border:1px solid rgba(220,56,44,.15);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--red)">Semantic Caching at work:</strong> 64% of pre-visit prep queries today across the endocrine clinic ask functionally the same question (renal-protective regimen optimization). LangCache returns the cached reasoning skeleton in under 50 ms; the agent personalizes the final step against this patient's specific context. Token cost down, latency stays inside budget.</div>
+</div></div>
+
+<!-- ══ STAGE 7: CLINICAL IMPACT ══ -->
+<div class="stage-content" id="stage6">
+<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Clinical &amp; Operational Impact</div><div class="stage-title">Time given back, access expanded</div><div class="stage-subtitle">The Iris context engine compresses what was a 12-minute manual synthesis into a 90-second briefing. Across a Mayo endocrine panel of 14 patients, that's nearly 3 hours of clinician time per day returned to the practice. Time given back is access expanded, which in Mayo's integrated practice is the operational lever that matters.</div><span class="component-tag">Clinical reasoning</span><span class="component-tag">Operational efficiency</span></div>
+<div class="viz-area">
+<div class="viz-panel" style="flex:2"><div class="viz-panel-title">What the Time Compression Looks Like</div>
+<div class="data-rows" style="margin-bottom:20px">
+<div class="data-row"><span class="data-label">Manual prep, complex follow-up</span><span class="data-value">10 to 14 minutes per patient</span></div>
+<div class="data-row"><span class="data-label">Iris-assisted prep</span><span class="data-value teal">60 to 120 seconds per patient</span></div>
+<div class="data-row"><span class="data-label">Panel of 14 patients, time saved</span><span class="data-value amber">~2.8 hours per clinician per day</span></div>
+<div class="data-row"><span class="data-label">Provenance &amp; attestation preserved</span><span class="data-value teal">Every claim traceable to source</span></div>
+<div class="data-row"><span class="data-label">Clinician verification step</span><span class="data-value">Always required, never bypassed</span></div>
+</div>
+<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">How Sai framed it:</strong> Workflow inefficiency creates missed opportunities, missed opportunities delay access, delayed access pushes patients elsewhere or postpones care. Iris attacks the workflow inefficiency at its source: the synthesis step. The cascade reverses.</div>
+</div>
+<div class="viz-panel"><div class="viz-panel-title">Encounter Prep, Two Modes</div>
+<div class="rev-compare">
+<div class="rev-card before"><div class="rev-value" style="color:var(--text3)">12 min</div><div class="rev-label">Manual synthesis<br>Per complex patient</div></div>
+<div class="rev-arrow">&rarr;</div>
+<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">90 sec</div><div class="rev-label">Iris-assisted brief<br>Clinician-attested</div></div>
+</div>
+<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">Applied across the Patient In Front Of Me workflow, OR prep, inpatient rounding, and ED triage <span style="color:var(--text2);font-weight:600">across all four Mayo regions.</span></div>
+</div>
+</div></div>
+
+<!-- ══ STAGE 8: OUTCOME ══ -->
+<div class="stage-content" id="stage7">
+<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Dr. Vasquez sees a synthesized brief, not a data dump</div><div class="stage-subtitle">Same patient, same 90 seconds. On the left, the agent dumps chronological data and asks the clinician to synthesize. On the right, Iris hands the agent a clean entity-grounded context package and the agent delivers a structured clinical brief with provenance on every line.</div></div>
+<div class="outcome-split">
+
+<!-- GENERIC -->
+<div class="outcome-col">
+<div class="outcome-header generic">Generic Agent Output (Today)</div>
+<div class="brief-screen">
+<div class="brief-statusbar"><span>07:42</span><span>UNSTRUCTURED</span></div>
+<div class="brief-header generic-head">
+<div class="brief-app">CLINICAL ASSISTANT</div>
+<div class="brief-patient" style="color:var(--text3)">MRN-8847291</div>
+</div>
+<div class="brief-body generic">
+Patient is a 58-year-old female with a history of type 2 diabetes mellitus diagnosed in 2013. Hemoglobin A1C values include 7.1 in 2014, 7.4 in 2015, 7.8 in 2016, 7.6 in 2017, 8.0 in 2018, 8.2 in 2019, 7.9 in 2020, 8.1 in 2021, 8.4 in 2022, 8.0 in 2023, 8.2 in 2024, and 8.6 most recent. Patient has hypertension diagnosed in 2014. Blood pressure readings vary across visits. Current medications include metformin 1000 mg twice daily, glipizide 10 mg daily, insulin glargine 28 units nightly. Patient was started on metformin in 2013, glipizide added in 2017, insulin glargine added in 2019. Patient had a nephrology consultation in October 2022 with eGFR of 62 at that time. Patient has had three outside record imports from a referring health system over the past 24 months. An echocardiogram report from 2024 from the outside system notes left ventricular hypertrophy. Patient sister has type 2 diabetes and is on dialysis. Patient had an ACE inhibitor angioedema reaction in 2019 and ACE inhibitors are listed as an allergy. Recent labs from overnight show eGFR of 47 and microalbumin of 142 mg/g creatinine. Lipid panel from two days ago shows LDL of 108. Latest blood pressure readings from the past three visits are 148/92, 144/88, and 152/94. Pharmacy refill records suggest gaps in fills during Q3 and Q4 of 2023. Patient is here for diabetes follow-up...
+</div>
+<div class="outcome-metrics generic-m" style="border-top:1px solid var(--border);border-radius:0">
+<div class="outcome-metric"><div class="outcome-metric-value">847</div><div class="outcome-metric-label">Words to read</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">10-12 min</div><div class="outcome-metric-label">Synthesis time</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">Manual</div><div class="outcome-metric-label">Provenance check</div></div>
+</div>
+</div>
+</div>
+
+<!-- PERSONALIZED -->
+<div class="outcome-col">
+<div class="outcome-header personalized">Iris-Powered Clinical Brief</div>
+<div class="brief-screen" style="border-color:rgba(0,201,167,.25)">
+<div class="brief-statusbar"><span>07:42</span><span style="color:var(--teal)">CONTEXT READY &middot; 187 MS</span></div>
+<div class="brief-header">
+<div class="brief-app">PATIENT IN FRONT OF ME</div>
+<div class="brief-patient" style="color:var(--mayo-light)">58F &middot; T2DM x 12yr &middot; MRN-8847291</div>
+</div>
+<div class="brief-body">
+
+<div class="brief-section">
+<div class="brief-section-title">Situation in one line</div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">T2DM with newly emerging diabetic kidney disease. eGFR dropped 62 &rarr; 47 over 24 months. First microalbuminuria reading overnight.</span><span class="brief-provenance">epic/labs</span></div>
+</div>
+
+<div class="brief-section alert">
+<div class="brief-section-title">Active flags</div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">ACEi angioedema 2019. ACE inhibitors contraindicated.</span><span class="brief-provenance">epic/allergy</span></div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">Adherence gap Q3/Q4 2023 inferred from pharmacy refill cadence.</span><span class="brief-provenance">epic/pharmacy</span></div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">BP uncontrolled, last 3 readings averaging 148/91.</span><span class="brief-provenance">epic/vitals</span></div>
+</div>
+
+<div class="brief-section recommend">
+<div class="brief-section-title">Recommended pathway (clinician-attested)</div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">Add empagliflozin 10 mg. Renal-protective, no contraindication.</span><span class="brief-provenance">cohort/812</span></div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">Nephrology eConsult, prior consult on file accelerates re-referral.</span><span class="brief-provenance">epic/consult</span></div>
+<div class="brief-line"><span class="dot"></span><span style="flex:1">Consider ARB add for BP + albuminuria, monitor K+ at 2 weeks.</span><span class="brief-provenance">kdigo/2024</span></div>
+</div>
+
+</div>
+<div class="outcome-metrics personalized-m" style="border-top:1px solid rgba(0,201,167,.15);border-radius:0">
+<div class="outcome-metric"><div class="outcome-metric-value">90 sec</div><div class="outcome-metric-label">Read &amp; verify</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">100%</div><div class="outcome-metric-label">Provenance tagged</div></div>
+<div class="outcome-metric"><div class="outcome-metric-value">187 ms</div><div class="outcome-metric-label">Context assembly</div></div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
+<div class="stage-content" id="stage8">
+<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">One context engine. Four Iris pillars. Patient In Front Of Me, ready.</div><div class="stage-subtitle">Every component you just saw running together. Epic, HL7 streams, outside records, the advanced data lake, and imaging metadata feed Iris. Iris assembles context. The clinical agent reasons. The clinician verifies and attests. The four Iris pillars are what make this work across specialty agents and care settings.</div></div>
+<div class="arch-wrap">
+<div class="arch-frame">
+
+<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources (Provenance)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Epic EHR</h4><p>System of record across all campuses</p></div>
+<div class="arch-node"><h4>HL7 / FHIR Streams</h4><p>Orders, results, telemetry, vitals</p></div>
+<div class="arch-node"><h4>Outside Records (CCD/XML)</h4><p>Interop feeds, scanned documents</p></div>
+<div class="arch-node"><h4>Mayo Advanced Data Lake</h4><p>OMOP-formatted longitudinal records</p></div>
+<div class="arch-node"><h4>Imaging Metadata</h4><p>Radiology, pathology, omics signals</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>Real-time CDC from Epic Clarity, advanced data lake, sub-second sync</p></div>
+<div class="arch-node"><h4>Redis Streams</h4><p>Live HL7 telemetry, result events, order state changes</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Iris Context Tier <span class="iris-pill">REAL-TIME CONTEXT ENGINE</span></div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Agent Memory</h4><p>Working + long-term + episodic recall across encounters</p></div>
+<div class="arch-node"><h4>Context Retriever</h4><p>Schema-first navigable paths over patient entities</p></div>
+<div class="arch-node"><h4>Hybrid Search</h4><p>Filter + vector in one query, regulated-safe</p></div>
+<div class="arch-node"><h4>Semantic Caching</h4><p>LangCache for repeated clinical queries</p></div>
+</div>
+<div class="tier-context-storage">
+<div class="storage-band ram"><span class="storage-band-tag">RAM</span><span class="storage-band-text">Hot: today's labs, live vitals, active orders, current meds, allergy flags, in-encounter state</span></div>
+<div class="storage-band flex"><span class="storage-band-tag">FLEX</span><span class="storage-band-text">Warm: longitudinal record, prior outside records, imaging metadata, multi-year trajectories</span></div>
+</div>
+<div class="arch-data-strip">
+<div class="arch-data-chip">Patient Entity Graph</div>
+<div class="arch-data-chip">TimeSeries</div>
+<div class="arch-data-chip">Embeddings</div>
+<div class="arch-data-chip">Encounter State</div>
+<div class="arch-data-chip">Provenance Tags</div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-decide"><div class="arch-tier-label">Clinical Reasoning Layer</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Clinical Rules</h4><p>Contraindications, allergies, eligibility</p></div>
+<div class="arch-node"><h4>Reasoning Agent (LLM)</h4><p>Vertex AI / Gemini, evidence-grounded</p></div>
+<div class="arch-node"><h4>Similar-Patient Cohort</h4><p>Hybrid retrieval over outcomes</p></div>
+<div class="arch-node"><h4>Knowledge Augmentation</h4><p>Guidelines, ontologies, protocols</p></div>
+</div></div>
+
+<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
+<div class="arch-tier-row">
+<div class="arch-node"><h4>Clinician Workstation</h4><p>Patient In Front Of Me brief</p></div>
+<div class="arch-node"><h4>Epic In-Context Panel</h4><p>SMART on FHIR embedded</p></div>
+<div class="arch-node"><h4>Inpatient Rounding App</h4><p>Mobile, OR, ED surfaces</p></div>
+<div class="arch-node"><h4>Specialty Agents</h4><p>Endocrine, anesthesia, oncology</p></div>
+</div></div>
+
+<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Clinician attestation &rarr; Agent Memory enrichment &rarr; Updated cohort embeddings &rarr; Redeployed to Iris context tier</span></div>
+
+</div>
+
+<div class="pillar-grid">
+<div class="pillar-card"><div class="pillar-num">PILLAR 1</div><div class="pillar-name">Navigable Systems</div><div class="pillar-desc">Patient entity graph the agent walks, not raw tables it queries.</div></div>
+<div class="pillar-card"><div class="pillar-num">PILLAR 2</div><div class="pillar-name">Instant Retrieval</div><div class="pillar-desc">Full context package in under 250 ms P95, sub-ms per element.</div></div>
+<div class="pillar-card"><div class="pillar-num">PILLAR 3</div><div class="pillar-name">Real-Time Freshness</div><div class="pillar-desc">Per-element hydration policies. eGFR fresh, BMI tunable, family history durable.</div></div>
+<div class="pillar-card"><div class="pillar-num">PILLAR 4</div><div class="pillar-name">Compounding Context</div><div class="pillar-desc">Agent Memory grows with every clinician attestation across the institution.</div></div>
+</div>
+
+<div class="arch-callouts">
+<div class="arch-callout"><div class="arch-callout-label">Context Assembly (P95)</div><div class="arch-callout-value teal">187 ms</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Prep Time Compression</div><div class="arch-callout-value orange">12 min &rarr; 90 sec</div></div>
+<div class="arch-callout"><div class="arch-callout-label">Time Returned Per Clinician/Day</div><div class="arch-callout-value amber">~2.8 hours</div></div>
+</div>
+</div>
+</div>
+
+</div>
+
+<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+
+<script>
+let current=0;const total=9;
+const latencies=['<250ms','--','1.4s','220ms','187ms','230ms','187ms','187ms','187ms'];
+function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
+function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
+document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
+updateUI();
+</script>
+</body>
+</html>
