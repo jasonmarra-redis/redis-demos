@@ -1,595 +1,555 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Redis Real-Time Decisioning Demo | OneMain Financial</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-:root {
-  --red:#DC382C;--teal:#00C9A7;--blue:#4F8CFF;--amber:#FFBC57;--purple:#A78BFA;
-  --bg:#080B14;--bg2:#0F1420;--bg3:#161C2A;--border:rgba(255,255,255,.07);
-  --text:#E8ECF4;--text2:#8892A8;--text3:#4A5568;
-  --mono:'JetBrains Mono',monospace;--sans:'Outfit',sans-serif;
-  --orange:#F97316;
-  --om-blue:#003B5C;--om-gold:#FFC72C;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:var(--sans);background:var(--bg);color:var(--text);overflow-x:hidden;min-height:100vh}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50}
-.topbar-left{display:flex;align-items:center;gap:16px}
-.redis-logo{font-size:24px;font-weight:800;color:var(--red)}
-.topbar-divider{width:1px;height:24px;background:var(--border)}
-.topbar-title{font-size:14px;color:var(--text2);font-weight:500}
-.topbar-right{display:flex;align-items:center;gap:20px}
-.latency-display{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:8px;background:rgba(0,201,167,.08);border:1px solid rgba(0,201,167,.2);font-family:var(--mono);font-size:13px;font-weight:600}
-.latency-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);animation:blink 1.5s infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.latency-value{color:var(--teal)}
-.latency-label{color:var(--text3);font-size:11px}
-.stage-counter{font-size:13px;color:var(--text3);font-family:var(--mono)}
-.progress-track{display:flex;gap:0;padding:0 40px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
-.progress-step{flex:1;min-width:110px;padding:14px 10px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.3px;position:relative;transition:all .4s;cursor:pointer}
-.progress-step::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--red);transform:scaleX(0);transition:transform .5s cubic-bezier(.4,0,.2,1)}
-.progress-step.active{color:var(--text)}.progress-step.active::after{transform:scaleX(1)}
-.progress-step.done{color:var(--teal)}.progress-step.done::after{transform:scaleX(1);background:var(--teal)}
-.step-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .4s;font-family:var(--mono);flex-shrink:0}
-.progress-step.active .step-num{background:var(--red);border-color:var(--red);color:#fff}
-.progress-step.done .step-num{background:var(--teal);border-color:var(--teal);color:#fff}
-.stage-viewport{min-height:calc(100vh - 120px);display:flex;flex-direction:column;padding:40px}
-.stage-content{display:none;flex:1;animation:fadeUp .6s cubic-bezier(.4,0,.2,1) forwards}
-.stage-content.active{display:flex;flex-direction:column}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.stage-header{margin-bottom:32px}
-.stage-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--mono)}
-.badge-arch{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
-.badge-trigger{background:rgba(249,115,22,.1);color:var(--orange);border:1px solid rgba(249,115,22,.2)}
-.badge-ingest{background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.2)}
-.badge-context{background:rgba(0,201,167,.1);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
-.badge-features{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
-.badge-ranking{background:rgba(79,140,255,.1);color:var(--blue);border:1px solid rgba(79,140,255,.2)}
-.badge-revenue{background:rgba(255,188,87,.1);color:var(--amber);border:1px solid rgba(255,188,87,.2)}
-.badge-outcome{background:rgba(167,139,250,.1);color:var(--purple);border:1px solid rgba(167,139,250,.2)}
-.stage-title{font-size:34px;font-weight:700;line-height:1.2;letter-spacing:-.5px;margin-bottom:10px}
-.stage-subtitle{font-size:16px;color:var(--text2);line-height:1.6;max-width:820px}
-.component-tag{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--mono);background:rgba(220,56,44,.1);color:var(--red);border:1px solid rgba(220,56,44,.15);margin-right:8px;margin-top:12px}
-.viz-area{flex:1;display:flex;gap:24px;align-items:stretch}
-.viz-panel{flex:1;border-radius:14px;background:var(--bg2);border:1px solid var(--border);padding:26px;position:relative;overflow:hidden}
-.viz-panel::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.03) 0%,transparent 70%);pointer-events:none}
-.viz-panel-title{font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:18px;font-family:var(--mono)}
-.data-rows{display:flex;flex-direction:column;gap:9px}
-.data-row{display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--border);animation:slideIn .5s cubic-bezier(.4,0,.2,1) forwards;opacity:0;gap:12px}
-.data-row:nth-child(1){animation-delay:.1s}.data-row:nth-child(2){animation-delay:.18s}.data-row:nth-child(3){animation-delay:.26s}.data-row:nth-child(4){animation-delay:.34s}.data-row:nth-child(5){animation-delay:.42s}.data-row:nth-child(6){animation-delay:.5s}.data-row:nth-child(7){animation-delay:.58s}
-@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
-.data-label{font-size:13px;color:var(--text2);font-weight:500}
-.data-value{font-size:12px;font-weight:600;color:var(--text);font-family:var(--mono);text-align:right}
-.data-value.red{color:var(--red)}.data-value.teal{color:var(--teal)}.data-value.amber{color:var(--amber)}.data-value.blue{color:var(--blue)}.data-value.orange{color:var(--orange)}.data-value.purple{color:var(--purple)}
-.flow-container{display:flex;flex-direction:column;gap:12px}
-.flow-item{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:flowIn .6s forwards}
-.flow-item:nth-child(1){animation-delay:.1s}.flow-item:nth-child(2){animation-delay:.2s}.flow-item:nth-child(3){animation-delay:.3s}.flow-item:nth-child(4){animation-delay:.4s}.flow-item:nth-child(5){animation-delay:.5s}.flow-item:nth-child(6){animation-delay:.6s}
-@keyframes flowIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.flow-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--mono);letter-spacing:-.5px}
-.flow-source{font-size:13px;font-weight:700}.flow-detail{font-size:11px;color:var(--text3);margin-top:2px}
-.flow-arrow{color:var(--red);font-size:16px;margin-left:auto;animation:pulseArrow 1.5s infinite}
-@keyframes pulseArrow{0%,100%{opacity:1;transform:translateX(0)}50%{opacity:.5;transform:translateX(4px)}}
-.genre-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:6px;margin-bottom:4px}
-.genre-bar div{height:100%}
-.genre-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text3);font-family:var(--mono)}
-.viewer-card{display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:20px;animation:fadeUp .6s forwards}
-.viewer-avatar{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,var(--om-blue),#0066A0);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0}
-.viewer-name{font-size:17px;font-weight:700}.viewer-detail{font-size:12px;color:var(--text2);margin-top:2px}
-.viewer-badge{margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--mono);background:rgba(255,199,44,.15);color:var(--om-gold);border:1px solid rgba(255,199,44,.25)}
-.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.content-card{border-radius:12px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards;transition:all .3s}
-.content-card:nth-child(1){animation-delay:.15s}.content-card:nth-child(2){animation-delay:.3s}.content-card:nth-child(3){animation-delay:.45s}
-@keyframes offerPop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
-.content-card.winner{border-color:var(--teal);background:rgba(0,201,167,.05);box-shadow:0 0 24px rgba(0,201,167,.08)}
-.content-rank{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text3);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase}
-.content-card.winner .content-rank{color:var(--teal)}
-.content-title{font-size:15px;font-weight:700;margin-bottom:4px}
-.content-meta{font-size:11px;color:var(--text3);margin-bottom:12px}
-.content-source{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--mono);margin-bottom:10px}
-.score-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
-.score-fill{height:100%;border-radius:3px;animation:scoreFill 1s cubic-bezier(.4,0,.2,1) forwards;animation-delay:.7s;width:0}
-@keyframes scoreFill{to{width:var(--score)}}
-.score-label{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)}
-.rev-compare{display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px}
-.rev-card{padding:22px;border-radius:12px;text-align:center}
-.rev-card.before{background:rgba(255,255,255,.03);border:1px solid var(--border)}
-.rev-card.after{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.2)}
-.rev-value{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px}
-.rev-label{font-size:12px;color:var(--text3)}
-.rev-arrow{font-size:28px;color:var(--teal);animation:pulseArrow 1.5s infinite}
-.arch-wrap{flex:1;display:flex;flex-direction:column;gap:18px}
-.arch-frame{flex:1;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:34px 30px 26px;position:relative;overflow:hidden}
-.arch-frame::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(220,56,44,.04),transparent 65%);pointer-events:none}
-.arch-tier{position:relative;z-index:2}
-.arch-tier-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px}
-.arch-tier-row{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
-.arch-node{flex:1;border-radius:10px;padding:14px 14px;text-align:center;border:1px solid;min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;transition:all .25s}
-.arch-node:hover{transform:translateY(-2px)}
-.arch-node h4{font-size:13px;font-weight:700;margin-bottom:3px;line-height:1.3}
-.arch-node p{font-size:10.5px;line-height:1.4;opacity:.7;font-family:var(--mono)}
-.tier-source .arch-tier-label{color:var(--text3)}
-.tier-source .arch-node{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1)}
-.tier-source .arch-node:hover{border-color:rgba(255,255,255,.25)}
-.tier-source .arch-node h4{color:#D8DCE4}
-.tier-source .arch-node p{color:var(--text3)}
-.tier-ingest .arch-tier-label{color:#FF8B6A}
-.tier-ingest .arch-node{background:rgba(220,56,44,.08);border-color:rgba(220,56,44,.2)}
-.tier-ingest .arch-node:hover{border-color:rgba(220,56,44,.5);background:rgba(220,56,44,.12)}
-.tier-ingest .arch-node h4{color:#FF8B6A}
-.tier-ingest .arch-node p{color:rgba(255,139,106,.6)}
-.tier-context .arch-tier-label{color:var(--teal)}
-.tier-context .arch-node{background:rgba(0,201,167,.06);border-color:rgba(0,201,167,.15)}
-.tier-context .arch-node:hover{border-color:rgba(0,201,167,.4);background:rgba(0,201,167,.1)}
-.tier-context .arch-node h4{color:#5EECC8}
-.tier-context .arch-node p{color:rgba(94,236,200,.55)}
-.tier-decide .arch-tier-label{color:var(--amber)}
-.tier-decide .arch-node{background:rgba(255,188,87,.06);border-color:rgba(255,188,87,.15)}
-.tier-decide .arch-node:hover{border-color:rgba(255,188,87,.4);background:rgba(255,188,87,.1)}
-.tier-decide .arch-node h4{color:var(--amber)}
-.tier-decide .arch-node p{color:rgba(255,188,87,.55)}
-.tier-act .arch-tier-label{color:var(--blue)}
-.tier-act .arch-node{background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.15)}
-.tier-act .arch-node:hover{border-color:rgba(79,140,255,.4);background:rgba(79,140,255,.1)}
-.tier-act .arch-node h4{color:#7FADFF}
-.tier-act .arch-node p{color:rgba(127,173,255,.55)}
-.arch-flow-arrow{display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0}
-.arch-flow-arrow::before{content:'';width:1px;height:100%;background:linear-gradient(to bottom,rgba(255,255,255,.1),rgba(255,255,255,.05))}
-.arch-flow-arrow svg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
-.arch-data-strip{display:flex;gap:0;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(0,201,167,.12)}
-.arch-data-chip{flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(94,236,200,.65);background:rgba(0,201,167,.04);border-right:1px solid rgba(0,201,167,.1);font-family:var(--mono);letter-spacing:.3px;text-transform:uppercase}
-.arch-data-chip:last-child{border-right:none}
-.arch-feedback{margin-top:14px;padding:12px 18px;border-radius:10px;border:1px dashed rgba(220,56,44,.3);background:rgba(220,56,44,.04);display:flex;align-items:center;justify-content:center;gap:12px;font-size:12px;color:var(--text2)}
-.arch-feedback-icon{width:26px;height:26px;border-radius:50%;background:rgba(220,56,44,.15);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--red);flex-shrink:0}
-.arch-callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
-.arch-callout{padding:13px 16px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border)}
-.arch-callout-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
-.arch-callout-value{font-size:15px;font-weight:700;color:var(--text)}
-.arch-callout-value.teal{color:var(--teal)}
-.arch-callout-value.orange{color:var(--orange)}
-.arch-callout-value.amber{color:var(--amber)}
-.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-.feat-card{padding:16px 18px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--border);opacity:0;animation:offerPop .5s forwards}
-.feat-card:nth-child(1){animation-delay:.1s}.feat-card:nth-child(2){animation-delay:.18s}.feat-card:nth-child(3){animation-delay:.26s}.feat-card:nth-child(4){animation-delay:.34s}.feat-card:nth-child(5){animation-delay:.42s}.feat-card:nth-child(6){animation-delay:.5s}
-.feat-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.5px;margin-bottom:4px}
-.feat-desc{font-size:11px;color:var(--text3);margin-bottom:8px;line-height:1.45}
-.feat-value-row{display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)}
-.feat-value{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text)}
-.feat-latency{font-family:var(--mono);font-size:10px;color:var(--teal)}
-/* OneMain Pulse application screen (B2B-style mockup) */
-.app-screen{background:#FAFBFC;border-radius:14px;border:2px solid #333;overflow:hidden;position:relative;color:#1A1A1A}
-.app-screen.declined{border-color:rgba(220,56,44,.5)}
-.app-screen.approved{border-color:rgba(0,201,167,.4)}
-.app-header{padding:18px 24px;background:var(--om-blue);display:flex;align-items:center;justify-content:space-between}
-.app-brand{color:#fff;font-size:14px;font-weight:800;letter-spacing:.5px}
-.app-brand .gold{color:var(--om-gold)}
-.app-step{color:rgba(255,255,255,.75);font-size:11px;font-family:var(--mono)}
-.app-body{padding:22px 24px}
-.app-applicant{display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid #E5E7EB;margin-bottom:16px}
-.app-avatar-sm{width:42px;height:42px;border-radius:8px;background:linear-gradient(135deg,#1E2A44,#003B5C);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
-.app-applicant-name{font-size:14px;font-weight:700;color:#1A1A1A}
-.app-applicant-info{font-size:11px;color:#6B7280;margin-top:2px;font-family:var(--mono)}
-.app-fields{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
-.app-field{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px}
-.app-field-label{color:#6B7280}
-.app-field-value{color:#1A1A1A;font-weight:600;font-family:var(--mono);text-align:right}
-.app-decision{padding:16px;border-radius:10px;text-align:center;margin-top:14px}
-.app-decision.approve{background:rgba(0,201,167,.08);border:2px solid rgba(0,201,167,.3)}
-.app-decision.decline{background:rgba(255,255,255,.04);border:2px solid rgba(120,120,130,.3)}
-.app-decision-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;font-family:var(--mono)}
-.app-decision.approve .app-decision-label{color:var(--teal)}
-.app-decision.decline .app-decision-label{color:#6B7280}
-.app-decision-value{font-size:22px;font-weight:800;letter-spacing:.5px}
-.app-decision.approve .app-decision-value{color:#00876A}
-.app-decision.decline .app-decision-value{color:#4B5563}
-.app-decision-detail{font-size:11px;color:#6B7280;margin-top:6px;line-height:1.4}
-.outcome-split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.outcome-col{display:flex;flex-direction:column;gap:14px}
-.outcome-header{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);text-align:center}
-.outcome-header.generic{background:rgba(255,255,255,.04);color:var(--text3);border:1px solid var(--border)}
-.outcome-header.personalized{background:rgba(0,201,167,.08);color:var(--teal);border:1px solid rgba(0,201,167,.2)}
-.outcome-metrics{display:flex;gap:16px;padding:16px;border-radius:10px}
-.outcome-metrics.generic-m{background:rgba(255,255,255,.03);border:1px solid var(--border)}
-.outcome-metrics.personalized-m{background:rgba(0,201,167,.05);border:1px solid rgba(0,201,167,.15)}
-.outcome-metric{flex:1;text-align:center}
-.outcome-metric-value{font-family:var(--mono);font-size:20px;font-weight:700;line-height:1}
-.generic-m .outcome-metric-value{color:var(--text3)}
-.personalized-m .outcome-metric-value{color:var(--teal)}
-.outcome-metric-label{font-size:10px;color:var(--text3);margin-top:4px}
-.nav-bar{display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--border);background:rgba(8,11,20,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50}
-.nav-hint{font-size:13px;color:var(--text3)}
-.nav-hint kbd{display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text2);margin:0 2px}
-.nav-buttons{display:flex;gap:12px}
-.nav-btn{padding:11px 26px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;border:none;font-family:var(--sans)}
-.nav-btn.back{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
-.nav-btn.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
-.nav-btn.next{background:var(--red);color:#fff}
-.nav-btn.next:hover{background:#c0302a;transform:translateY(-1px)}
-.nav-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
-.nav-btn.restart{background:var(--teal);color:#fff}
-.nav-btn.restart:hover{background:#00a88b}
-@media(max-width:900px){.topbar,.progress-track,.stage-viewport,.nav-bar{padding-left:16px;padding-right:16px}.stage-title{font-size:26px}.viz-area{flex-direction:column}.outcome-split{grid-template-columns:1fr}.content-grid{grid-template-columns:1fr}.feat-grid{grid-template-columns:1fr}.arch-callouts{grid-template-columns:1fr}.progress-step span{display:none}}
-</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
 </head>
 <body>
-<div class="topbar"><div class="topbar-left"><div class="redis-logo">Redis</div><div class="topbar-divider"></div><div class="topbar-title">Real-Time Decisioning Demo | OneMain Financial</div></div><div class="topbar-right"><div class="latency-display"><div class="latency-dot"></div><span class="latency-label">Pipeline</span><span class="latency-value" id="globalLatency">--</span></div><div class="stage-counter" id="stageCounter">1 / 9</div></div></div>
-<div class="progress-track" id="progressTrack">
-<div class="progress-step active" data-step="0"><div class="step-num">1</div><span>Architecture</span></div>
-<div class="progress-step" data-step="1"><div class="step-num">2</div><span>Application Submit</span></div>
-<div class="progress-step" data-step="2"><div class="step-num">3</div><span>Ingest</span></div>
-<div class="progress-step" data-step="3"><div class="step-num">4</div><span>Context</span></div>
-<div class="progress-step" data-step="4"><div class="step-num">5</div><span>Feature Serving</span></div>
-<div class="progress-step" data-step="5"><div class="step-num">6</div><span>Offer Ranking</span></div>
-<div class="progress-step" data-step="6"><div class="step-num">7</div><span>Risk-Adj NIM</span></div>
-<div class="progress-step" data-step="7"><div class="step-num">8</div><span>Outcome</span></div>
-<div class="progress-step" data-step="8"><div class="step-num">9</div><span>Architecture Recap</span></div>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/redis-brand-design-system-ce80d8ec-3680-451b-9456-7f55cc295dbf/styles/fonts.css">
+<link rel="stylesheet" href="_ds/redis-brand-design-system-ce80d8ec-3680-451b-9456-7f55cc295dbf/styles/tokens.css">
+<link rel="stylesheet" href="_ds/redis-brand-design-system-ce80d8ec-3680-451b-9456-7f55cc295dbf/styles/legacy-aliases.css">
+<link rel="stylesheet" href="_ds/redis-brand-design-system-ce80d8ec-3680-451b-9456-7f55cc295dbf/styles/components.css">
+<script src="_ds/redis-brand-design-system-ce80d8ec-3680-451b-9456-7f55cc295dbf/_ds_bundle.js"></script>
+<style>
+  html,body{margin:0;padding:0}
+  body{background:var(--rd-midnight-base);color:var(--rd-white);font-family:var(--rd-font-sans);overflow-x:hidden;-webkit-font-smoothing:antialiased;min-height:100vh}
+  *{box-sizing:border-box}
+  a{color:var(--rd-hyper-05);text-decoration:none}
+  a:hover{color:var(--rd-hyper-04)}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+  @keyframes scoreFill{from{width:0}to{width:var(--score)}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;background:var(--rd-midnight-base)">
+
+<!-- TOPBAR -->
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--rd-dusk-07);background:rgba(9,26,35,.95);backdrop-filter:blur(20px);position:sticky;top:0;z-index:50">
+  <div style="display:flex;align-items:center;gap:16px">
+    <img src="assets/redis-logo-white.svg" alt="Redis" style="height:26px;display:block">
+    <div style="width:1px;height:24px;background:var(--rd-dusk-07)"></div>
+    <div style="font-size:14px;color:var(--rd-dusk-04);font-weight:500">Real-time decisioning demo · OneMain Financial</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:20px">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:5px;background:rgba(128,219,255,.08);border:1px solid rgba(128,219,255,.22);font-family:var(--rd-font-mono);font-size:13px;font-weight:600">
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--rd-blue-03);animation:blink 1.5s infinite"></div>
+      <span style="color:var(--rd-dusk-05);font-size:11px">Pipeline</span>
+      <span style="color:var(--rd-blue-03)">{{ latency }}</span>
+    </div>
+    <div style="font-size:13px;color:var(--rd-dusk-05);font-family:var(--rd-font-mono)">{{ counter }}</div>
+  </div>
 </div>
 
-<div class="stage-viewport">
-
-<!-- ══ STAGE 1: ARCHITECTURE OVERVIEW ══ -->
-<div class="stage-content active" id="stage0">
-<div class="stage-header"><div class="stage-badge badge-arch">Stage 1: The Architecture</div><div class="stage-title">OneMain's Pulse Decisioning Stack</div><div class="stage-subtitle">Five tiers form a continuous loop: ingest, context, decide, act, learn. The DB2 mainframe, Postgres, Snowflake, and external bureau and fraud signals feed Redis. Pulse decides. The web, branch, and dealer channels render the offer. Every credit, fraud, and next-best-action decision flows through this architecture inside the 7-second loan SLA, with data access in under 75 milliseconds, on active-active Redis Enterprise across Evansville and London, KY.</div></div>
-<div class="arch-wrap">
-<div class="arch-frame">
-
-<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources (Systems of Record)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>DB2 Mainframe</h4><p>Loan core, customer master</p></div>
-<div class="arch-node"><h4>Snowflake</h4><p>Analytical store, model training</p></div>
-<div class="arch-node"><h4>Postgres / Crunchy</h4><p>Operational state (offloading)</p></div>
-<div class="arch-node"><h4>Bureau APIs</h4><p>Equifax, Experian, TransUnion</p></div>
-<div class="arch-node"><h4>Kafka Events</h4><p>Application + fraud signals</p></div>
-</div></div>
-
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
-
-<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>YAML-defined CDC from DB2, Postgres, Snowflake. Debezium collector, Redis staging DB, OpenShift Helm deploy.</p></div>
-<div class="arch-node"><h4>Featureform</h4><p>Online feature store. Train/serve parity from Snowflake to Pulse.</p></div>
-</div></div>
-
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
-
-<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Pulse Operational 360)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, ~128 GB, sub-10ms reads</p></div>
-<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 500 GB, replaces Postgres in decision path</p></div>
-<div class="arch-node"><h4>Active-Active</h4><p>Evansville + London KY, 48 prod shards</p></div>
+<!-- PROGRESS TRACK -->
+<div style="display:flex;padding:0 40px;background:var(--rd-midnight-02);border-bottom:1px solid var(--rd-dusk-07);overflow-x:auto">
+  <sc-for list="{{ steps }}" as="s" hint-placeholder-count="9">
+    <div style="{{ s.style }}" onClick="{{ s.onClick }}">
+      <div style="width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:var(--rd-font-mono);flex-shrink:0;border:1px solid;transition:all .3s" style="{{ s.numStyle }}">{{ s.num }}</div>
+      <span>{{ s.label }}</span>
+      <div style="{{ s.barStyle }}"></div>
+    </div>
+  </sc-for>
 </div>
-<div class="arch-data-strip">
-<div class="arch-data-chip">RedisJSON</div>
-<div class="arch-data-chip">Streams</div>
-<div class="arch-data-chip">Search</div>
-<div class="arch-data-chip">Vectors</div>
-<div class="arch-data-chip">Velocity Counters</div>
-</div></div>
 
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+<!-- STAGE VIEWPORT -->
+<div style="flex:1;display:flex;flex-direction:column;padding:40px">
 
-<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine (Pulse Platform)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>Credit Policy</h4><p>Eligibility, regulatory guardrails</p></div>
-<div class="arch-node"><h4>ML Risk Models</h4><p>PD, LGD, fraud, synthetic ID</p></div>
-<div class="arch-node"><h4>Pricing Engine</h4><p>APR, term, line size optimization</p></div>
-<div class="arch-node"><h4>Fraud Stack</h4><p>Velocity rules, device, mule graph</p></div>
-</div></div>
+<!-- ══ STAGE 1: ARCHITECTURE ══ -->
+<div style="{{ s0 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-purple-04);background:rgba(199,149,227,.12);border:1px solid rgba(199,149,227,.25)">Stage 1: The architecture</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">OneMain's Pulse decisioning stack.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">Five tiers form a continuous loop: ingest, context, decide, act, learn. The DB2 mainframe, Postgres, Snowflake, and external bureau and fraud signals feed Redis. Pulse decides. The web, branch, and dealer channels render the offer. Every credit, fraud, and next-best-action decision flows through this architecture inside the 7-second loan SLA, with data access under 75 milliseconds, on Active-Active Redis Enterprise across Evansville and London, KY.</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:18px">
+    <div style="flex:1;background:rgba(255,255,255,.02);border:1px solid var(--rd-dusk-07);border-radius:12px;padding:34px 30px 26px">
 
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-dusk-05)">Data sources (systems of record)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">DB2 mainframe</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Loan core, customer master</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Snowflake</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Analytical store, model training</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Postgres / Crunchy</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Operational state (offloading)</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Bureau APIs</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Equifax, Experian, TransUnion</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Kafka events</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Application + fraud signals</p></div>
+      </div></div>
 
-<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>OneMain Web</h4><p>Personalized loan offer</p></div>
-<div class="arch-node"><h4>Branch Workstation</h4><p>Loan officer screen</p></div>
-<div class="arch-node"><h4>Dealer (Foursight)</h4><p>Auto POS &lt;3 sec decision</p></div>
-<div class="arch-node"><h4>BrightWay Card + NBA</h4><p>Cross-sell, top-up, deposit</p></div>
-</div></div>
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(255,255,255,.14)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.2)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
 
-<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust (features used, scores, outcomes) &rarr; Snowflake &rarr; Model retraining &rarr; Featureform redeploys to Redis</span></div>
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-hyper-04)">Ingest layer</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,68,56,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,68,56,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-hyper-04)">Redis Data Integration (RDI)</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(253,115,106,.65);font-family:var(--rd-font-mono)">YAML-defined CDC from DB2, Postgres, Snowflake. Debezium collector, Redis staging DB, OpenShift Helm deploy.</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,68,56,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,68,56,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-hyper-04)">Featureform</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(253,115,106,.65);font-family:var(--rd-font-mono)">Online feature store. Train/serve parity from Snowflake to Pulse.</p></div>
+      </div></div>
 
-</div>
-<div class="arch-callouts">
-<div class="arch-callout"><div class="arch-callout-label">Loan SLA</div><div class="arch-callout-value teal">7 sec end-to-end</div></div>
-<div class="arch-callout"><div class="arch-callout-label">Feature Access Budget</div><div class="arch-callout-value orange">&lt;75 ms</div></div>
-<div class="arch-callout"><div class="arch-callout-label">Active-Active Footprint</div><div class="arch-callout-value amber">2 DCs / 48 shards</div></div>
-</div>
-</div>
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(255,68,56,.3)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,68,56,.45)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-blue-03)">Redis context tier (Pulse operational 360)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(128,219,255,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(128,219,255,.07)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-blue-02)">Redis RAM</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(128,219,255,.6);font-family:var(--rd-font-mono)">Hot tier, ~128 GB, sub-10ms reads</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(128,219,255,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(128,219,255,.07)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-blue-02)">Redis Flex</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(128,219,255,.6);font-family:var(--rd-font-mono)">Warm tier, 500 GB, replaces Postgres in decision path</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(128,219,255,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(128,219,255,.07)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-blue-02)">Active-Active</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(128,219,255,.6);font-family:var(--rd-font-mono)">Evansville + London KY, 48 prod shards</p></div>
+      </div>
+      <div style="display:flex;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(128,219,255,.15)">
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">RedisJSON</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Streams</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Search</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Vectors</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Velocity counters</div>
+      </div></div>
+
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(128,219,255,.3)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(128,219,255,.45)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-yellow-05)">Decision engine (Pulse platform)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">Credit policy</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">Eligibility, regulatory guardrails</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">ML risk models</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">PD, LGD, fraud, synthetic ID</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">Pricing engine</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">APR, term, line size optimization</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">Fraud stack</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">Velocity rules, device, mule graph</p></div>
+      </div></div>
+
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(220,255,30,.25)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,255,30,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-purple-04)">Output channels (act)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">OneMain web</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Personalized loan offer</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">Branch workstation</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Loan officer screen</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">Dealer (Foursight)</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Auto POS under 3 sec decision</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">BrightWay card + NBA</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Cross-sell, top-up, deposit</p></div>
+      </div></div>
+
+      <div style="margin-top:14px;padding:12px 18px;border-radius:8px;border:1px dashed rgba(255,68,56,.3);background:rgba(255,68,56,.05);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--rd-dusk-04);flex-wrap:wrap"><strong style="color:var(--rd-hyper-05)">Learn:</strong><span>Decision exhaust (features used, scores, outcomes) → Snowflake → model retraining → Featureform redeploys to Redis</span></div>
+
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div style="padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:6px">Loan SLA</div><div style="font-size:15px;font-weight:600;color:var(--rd-blue-03)">7 sec end-to-end</div></div>
+      <div style="padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:6px">Feature access budget</div><div style="font-size:15px;font-weight:600;color:var(--rd-hyper-05)">under 75 ms</div></div>
+      <div style="padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:6px">Active-Active footprint</div><div style="font-size:15px;font-weight:600;color:var(--rd-yellow-05)">2 DCs / 48 shards</div></div>
+    </div>
+  </div>
 </div>
 
 <!-- ══ STAGE 2: APPLICATION SUBMIT ══ -->
-<div class="stage-content" id="stage1">
-<div class="stage-header"><div class="stage-badge badge-trigger">Stage 2: Application Submit</div><div class="stage-title">Daniel applies for a $14,000 personal loan</div><div class="stage-subtitle">A returning OneMain customer submits a loan application from his phone at 8:47 PM. Pulse has roughly seven seconds to surface a personalized, risk-priced offer before he abandons. Postgres-backed legacy paths cannot meet that budget at concurrent volume. Redis can.</div></div>
-<div class="viz-area">
-<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Application Event</div>
-<div class="viewer-card"><div class="viewer-avatar">DV</div><div><div class="viewer-name">Daniel Voss</div><div class="viewer-detail">Existing OneMain customer | Evansville, IN | Subprime tier | 1 prior loan paid off in 2024</div></div><div class="viewer-badge">RETURNING</div></div>
-<div class="data-rows">
-<div class="data-row"><span class="data-label">Event</span><span class="data-value">loan_application_submit</span></div>
-<div class="data-row"><span class="data-label">Channel</span><span class="data-value">Mobile web (iOS Safari)</span></div>
-<div class="data-row"><span class="data-label">Submission time</span><span class="data-value orange">8:47 PM CT (peak digital)</span></div>
-<div class="data-row"><span class="data-label">Requested amount</span><span class="data-value amber">$14,000 unsecured personal loan</span></div>
-<div class="data-row"><span class="data-label">Stated purpose</span><span class="data-value">Debt consolidation</span></div>
-<div class="data-row"><span class="data-label">Stated income</span><span class="data-value">$58,400 / yr</span></div>
-<div class="data-row"><span class="data-label">FICO band (soft pull)</span><span class="data-value">632 (non-prime)</span></div>
-</div></div>
-<div class="viz-panel"><div class="viz-panel-title">Why The 7-Second SLA Matters</div>
-<div style="display:flex;flex-direction:column;gap:14px;margin-top:4px">
-<div style="font-size:13px;color:var(--text2);line-height:1.6">Daniel is a non-prime borrower with options. LendingClub, Best Egg, Upgrade, and Avant are one tap away. Every second past seven, funded-loan conversion drops measurably.</div>
-<div style="font-size:13px;color:var(--text2);line-height:1.6">The decision needs to combine bureau pull, internal customer history, fraud screening, risk model scoring, and pricing optimization. That entire chain has to clear in seven seconds, with feature access budgeted under <strong style="color:var(--orange)">75 milliseconds</strong>.</div>
-<div style="padding:14px;border-radius:8px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--red)">Without Redis:</strong> Postgres p95 reads sit at 50 to 100 ms under concurrent load. A single decision needs dozens of feature lookups. The math does not work, especially at the volume OneMain is pushing through Pulse.</div>
-<div style="padding:14px;border-radius:8px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.15);font-size:12px;color:var(--text2);line-height:1.6"><strong style="color:var(--teal)">With Redis:</strong> 200+ features hydrated from RedisJSON in single-digit milliseconds. The 7-second SLA stops being a constraint and becomes a competitive weapon.</div>
-</div></div>
-</div></div>
+<div style="{{ s1 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-hyper-05);background:rgba(255,68,56,.1);border:1px solid rgba(255,68,56,.22)">Stage 2: Application submit</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Daniel applies for a $14,000 personal loan.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">A returning OneMain customer submits a loan application from his phone at 8:47 PM. Pulse has roughly seven seconds to surface a personalized, risk-priced offer before he abandons. Postgres-backed legacy paths cannot meet that budget at concurrent volume. Redis can.</div>
+  </div>
+  <div style="flex:1;display:flex;gap:24px;align-items:stretch">
+    <div style="flex:2;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Application event</div>
+      <div style="display:flex;align-items:center;gap:18px;padding:18px 22px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--rd-dusk-07);margin-bottom:20px">
+        <div style="width:52px;height:52px;border-radius:8px;background:#003B5C;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#fff;flex-shrink:0">DV</div>
+        <div><div style="font-size:17px;font-weight:600">Daniel Voss</div><div style="font-size:12px;color:var(--rd-dusk-04);margin-top:2px">Existing OneMain customer · Evansville, IN · Subprime tier · 1 prior loan paid off in 2024</div></div>
+        <div style="margin-left:auto;padding:5px 12px;border-radius:5px;font-size:11px;font-weight:700;font-family:var(--rd-font-mono);background:rgba(255,199,44,.15);color:#FFC72C;border:1px solid rgba(255,199,44,.25)">RETURNING</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Event</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">loan_application_submit</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Channel</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">Mobile web (iOS Safari)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Submission time</span><span style="font-size:12px;font-weight:600;color:var(--rd-hyper-05);font-family:var(--rd-font-mono);text-align:right">8:47 PM CT (peak digital)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Requested amount</span><span style="font-size:12px;font-weight:600;color:var(--rd-yellow-05);font-family:var(--rd-font-mono);text-align:right">$14,000 unsecured personal loan</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Stated purpose</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">Debt consolidation</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Stated income</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">$58,400 / yr</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">FICO band (soft pull)</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">632 (non-prime)</span></div>
+      </div>
+    </div>
+    <div style="flex:1;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Why the 7-second SLA matters</div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:13px;color:var(--rd-dusk-04);line-height:1.6">Daniel is a non-prime borrower with options. LendingClub, Best Egg, Upgrade, and Avant are one tap away. Every second past seven, funded-loan conversion drops measurably.</div>
+        <div style="font-size:13px;color:var(--rd-dusk-04);line-height:1.6">The decision needs to combine bureau pull, internal customer history, fraud screening, risk model scoring, and pricing optimization. That entire chain has to clear in seven seconds, with feature access budgeted under <strong style="color:var(--rd-hyper-05)">75 milliseconds</strong>.</div>
+        <div style="padding:14px;border-radius:8px;background:rgba(255,68,56,.06);border:1px solid rgba(255,68,56,.14);font-size:12px;color:var(--rd-dusk-04);line-height:1.6"><strong style="color:var(--rd-hyper-05)">Without Redis:</strong> Postgres p95 reads sit at 50 to 100 ms under concurrent load. A single decision needs dozens of feature lookups. The math does not work, especially at the volume OneMain is pushing through Pulse.</div>
+        <div style="padding:14px;border-radius:8px;background:rgba(128,219,255,.06);border:1px solid rgba(128,219,255,.18);font-size:12px;color:var(--rd-dusk-04);line-height:1.6"><strong style="color:var(--rd-blue-03)">With Redis:</strong> 200+ features hydrated from RedisJSON in single-digit milliseconds. The 7-second SLA stops being a constraint and becomes a competitive weapon.</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ══ STAGE 3: INGEST ══ -->
-<div class="stage-content" id="stage2">
-<div class="stage-header"><div class="stage-badge badge-ingest">Stage 3: Ingest</div><div class="stage-title">OneMain's source systems flow into Redis</div><div class="stage-subtitle">RDI continuously syncs DB2, Postgres, and Snowflake into Redis using YAML transformation pipelines, no custom sync code. Featureform orchestrates ML features from Snowflake into the Redis online store. Bureau and fraud signals stream through Kafka. The result is a single live decisioning fabric.</div><span class="component-tag">Redis Data Integration (RDI)</span><span class="component-tag">Featureform</span></div>
-<div class="viz-area">
-<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Source Systems &rarr; Redis</div>
-<div class="flow-container">
-<div class="flow-item"><div class="flow-icon" style="background:rgba(120,140,180,.15);color:#A8B8D8">DB2</div><div><div class="flow-source">DB2 Mainframe &middot; Loan + Customer Core</div><div class="flow-detail">Active loan balances | Payment history | Customer master | 20+ years of relationship data</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(167,139,250,.12);color:var(--purple)">PG</div><div><div class="flow-source">Postgres / Crunchy &middot; Operational State</div><div class="flow-detail">Application workflow state | Decision history | Being progressively offloaded behind Redis Flex</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(79,140,255,.12);color:#29B5E8">SNOW</div><div><div class="flow-source">Snowflake &middot; Analytical Store + Model Training</div><div class="flow-detail">Model training data | Engineered features | Decision exhaust history | RDI 1.18 connector</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(0,201,167,.12);color:var(--teal)">BUR</div><div><div class="flow-source">Bureau APIs &middot; Equifax / Experian / TransUnion</div><div class="flow-detail">Tri-bureau pull | Trended attributes | Tradeline detail | Inquiry velocity</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(255,188,87,.12);color:var(--amber)">FRD</div><div><div class="flow-source">Fraud + Identity &middot; Device, Behavioral, Synthetic ID</div><div class="flow-detail">Device fingerprint | Velocity counters | Synthetic ID risk | SSN cultivation patterns</div></div><div class="flow-arrow">&rarr;</div></div>
-<div class="flow-item"><div class="flow-icon" style="background:rgba(220,56,44,.12);color:var(--red)">KFK</div><div><div class="flow-source">Kafka &middot; Live Application Events</div><div class="flow-detail">Submit, abandon, doc upload, e-sign | Cross-channel session join | Pulse audit log</div></div><div class="flow-arrow">&rarr;</div></div>
-</div></div>
-<div class="viz-panel"><div class="viz-panel-title">RDI Pipeline Status</div>
-<div class="data-rows">
-<div class="data-row"><span class="data-label">CDC mode</span><span class="data-value teal">Real-time (Debezium)</span></div>
-<div class="data-row"><span class="data-label">DB2 sync (joint roadmap)</span><span class="data-value teal">Streaming, no z/DIH</span></div>
-<div class="data-row"><span class="data-label">Postgres CDC</span><span class="data-value teal">&lt;1 sec lag</span></div>
-<div class="data-row"><span class="data-label">Snowflake connector</span><span class="data-value teal">RDI 1.18, GA</span></div>
-<div class="data-row"><span class="data-label">Kafka lag</span><span class="data-value teal">&lt;100 ms</span></div>
-<div class="data-row"><span class="data-label">Deployment</span><span class="data-value teal">OpenShift Helm, A-A</span></div>
-<div class="data-row"><span class="data-label">Custom sync code</span><span class="data-value teal">0 lines (YAML only)</span></div>
+<div style="{{ s2 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-hyper-05);background:rgba(255,68,56,.1);border:1px solid rgba(255,68,56,.22)">Stage 3: Ingest</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">OneMain's source systems flow into Redis.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">RDI continuously syncs DB2, Postgres, and Snowflake into Redis using YAML transformation pipelines, no custom sync code. Featureform orchestrates ML features from Snowflake into the Redis online store. Bureau and fraud signals stream through Kafka. The result is a single live decisioning fabric.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Redis Data Integration (RDI)</span><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Featureform</span></div>
+  </div>
+  <div style="flex:1;display:flex;gap:24px;align-items:stretch">
+    <div style="flex:2;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Source systems → Redis</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--rd-font-mono);background:rgba(185,194,198,.15);color:#B9C2C6">DB2</div><div style="flex:1"><div style="font-size:13px;font-weight:600">DB2 mainframe · loan + customer core</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-top:2px">Active loan balances · payment history · customer master · 20+ years of relationship data</div></div><div style="color:var(--rd-hyper-05);font-size:16px">→</div></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--rd-font-mono);background:rgba(199,149,227,.14);color:var(--rd-purple-04)">PG</div><div style="flex:1"><div style="font-size:13px;font-weight:600">Postgres / Crunchy · operational state</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-top:2px">Application workflow state · decision history · being progressively offloaded behind Redis Flex</div></div><div style="color:var(--rd-hyper-05);font-size:16px">→</div></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--rd-font-mono);background:rgba(128,219,255,.14);color:var(--rd-blue-03)">SNOW</div><div style="flex:1"><div style="font-size:13px;font-weight:600">Snowflake · analytical store + model training</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-top:2px">Model training data · engineered features · decision exhaust history · RDI 1.18 connector</div></div><div style="color:var(--rd-hyper-05);font-size:16px">→</div></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--rd-font-mono);background:rgba(128,219,255,.14);color:var(--rd-blue-03)">BUR</div><div style="flex:1"><div style="font-size:13px;font-weight:600">Bureau APIs · Equifax / Experian / TransUnion</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-top:2px">Tri-bureau pull · trended attributes · tradeline detail · inquiry velocity</div></div><div style="color:var(--rd-hyper-05);font-size:16px">→</div></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--rd-font-mono);background:rgba(220,255,30,.14);color:var(--rd-yellow-05)">FRD</div><div style="flex:1"><div style="font-size:13px;font-weight:600">Fraud + identity · device, behavioral, synthetic ID</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-top:2px">Device fingerprint · velocity counters · synthetic ID risk · SSN cultivation patterns</div></div><div style="color:var(--rd-hyper-05);font-size:16px">→</div></div>
+        <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;font-family:var(--rd-font-mono);background:rgba(255,68,56,.14);color:var(--rd-hyper-05)">KFK</div><div style="flex:1"><div style="font-size:13px;font-weight:600">Kafka · live application events</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-top:2px">Submit, abandon, doc upload, e-sign · cross-channel session join · Pulse audit log</div></div><div style="color:var(--rd-hyper-05);font-size:16px">→</div></div>
+      </div>
+    </div>
+    <div style="flex:1;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">RDI pipeline status</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">CDC mode</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">Real-time (Debezium)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">DB2 sync (joint roadmap)</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">Streaming, no z/DIH</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Postgres CDC</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">under 1 sec lag</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Snowflake connector</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">RDI 1.18, GA</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Kafka lag</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">under 100 ms</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Deployment</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">OpenShift Helm, A-A</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Custom sync code</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">0 lines (YAML only)</span></div>
+      </div>
+      <div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(255,68,56,.05);border:1px solid rgba(255,68,56,.14);font-size:11px;color:var(--rd-dusk-04);line-height:1.5"><strong style="color:var(--rd-hyper-05)">Why this matters:</strong> Pulse no longer waits for batch jobs. DB2, Postgres, and Snowflake stay as systems of record. Redis becomes the live decisioning fabric on top, and the 7-second SLA stops competing with the data layer.</div>
+    </div>
+  </div>
 </div>
-<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(220,56,44,.05);border:1px solid rgba(220,56,44,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--red)">Why this matters:</strong> Pulse no longer waits for batch jobs. DB2, Postgres, and Snowflake stay as systems of record. Redis becomes the live decisioning fabric on top, and the 7-second SLA stops competing with the data layer.</div>
-</div>
-</div></div>
 
-<!-- ══ STAGE 4: CONTEXT ASSEMBLY ══ -->
-<div class="stage-content" id="stage3">
-<div class="stage-header"><div class="stage-badge badge-context">Stage 4: Context Assembly</div><div class="stage-title">Daniel's full Pulse 360 + live application signals</div><div class="stage-subtitle">Redis assembles the complete picture: who Daniel is, his prior OneMain history, what the bureaus say right now, what the fraud stack sees on this device, and the live application state. Historical profile from DB2 and Snowflake meets in-flight signals from Kafka. One JSON document. One sub-millisecond read.</div><span class="component-tag">Redis RAM</span><span class="component-tag">Redis Flex</span></div>
-<div class="viz-area">
-<div class="viz-panel"><div class="viz-panel-title">Customer 360 (Pulse Profile)</div>
-<div style="margin-bottom:14px">
-<div class="data-label" style="margin-bottom:8px;font-size:12px">Risk Tier Distribution (last 24mo)</div>
-<div class="genre-bar"><div style="width:42%;background:var(--om-blue)"></div><div style="width:28%;background:var(--purple)"></div><div style="width:18%;background:var(--amber)"></div><div style="width:12%;background:var(--teal)"></div></div>
-<div class="genre-label"><span>Subprime 42%</span><span>Near-prime 28%</span><span>Stable 18%</span><span>Improving 12%</span></div>
+<!-- ══ STAGE 4: CONTEXT ══ -->
+<div style="{{ s3 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-blue-03);background:rgba(128,219,255,.1);border:1px solid rgba(128,219,255,.22)">Stage 4: Context assembly</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Daniel's full Pulse 360 + live application signals.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">Redis assembles the complete picture: who Daniel is, his prior OneMain history, what the bureaus say right now, what the fraud stack sees on this device, and the live application state. Historical profile from DB2 and Snowflake meets in-flight signals from Kafka. One JSON document. One sub-millisecond read.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Redis RAM</span><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Redis Flex</span></div>
+  </div>
+  <div style="flex:1;display:flex;gap:24px;align-items:stretch">
+    <div style="flex:1;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Customer 360 (Pulse profile)</div>
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;color:var(--rd-dusk-04);margin-bottom:8px;font-weight:500">Risk tier distribution (last 24mo)</div>
+        <div style="display:flex;height:8px;border-radius:4px;overflow:hidden;margin-bottom:4px"><div style="width:42%;background:#003B5C"></div><div style="width:28%;background:var(--rd-purple-04)"></div><div style="width:18%;background:var(--rd-yellow-05)"></div><div style="width:12%;background:var(--rd-blue-03)"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)"><span>Subprime 42%</span><span>Near-prime 28%</span><span>Stable 18%</span><span>Improving 12%</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Prior OneMain loans</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">1 (paid in full Q3 2024)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">DTI (internal calc)</span><span style="font-size:12px;font-weight:600;color:var(--rd-yellow-05);font-family:var(--rd-font-mono);text-align:right">38% (under 45% ceiling)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Prior loan performance</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">0 missed payments, 18 mo</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Bank account verified</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">Yes (Plaid, 14 mo tenure)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Employment</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">W-2, 4 yr tenure (LinkedIn match)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Branch relationship</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">Evansville Loan Officer #4421</span></div>
+      </div>
+    </div>
+    <div style="flex:1;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Live application signals</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Bureau pull (just now)</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">FICO 641, +9 since last app</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">New tradelines (90 days)</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">2 (auto, retail), both current</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Inquiry velocity (30 days)</span><span style="font-size:12px;font-weight:600;color:var(--rd-yellow-05);font-family:var(--rd-font-mono);text-align:right">3 hard pulls (rate shopping)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Device fingerprint</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">Match to prior session, no anomaly</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Synthetic ID risk</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">0.04 / 1.00 (clean)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Fraud velocity (24h)</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">No mule cluster hit</span></div>
+      </div>
+      <div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(128,219,255,.06);border:1px solid rgba(128,219,255,.18);font-size:11px;color:var(--rd-dusk-04);line-height:1.5"><strong style="color:var(--rd-blue-03)">Context signal:</strong> Daniel is a known-good returning customer with an improving credit profile and clean fraud signature. The model should price down from rack rate, not default to it. That decision lives in this context document.</div>
+    </div>
+  </div>
 </div>
-<div class="data-rows">
-<div class="data-row"><span class="data-label">Prior OneMain loans</span><span class="data-value">1 (paid in full Q3 2024)</span></div>
-<div class="data-row"><span class="data-label">DTI (internal calc)</span><span class="data-value amber">38% (under 45% policy ceiling)</span></div>
-<div class="data-row"><span class="data-label">Prior loan performance</span><span class="data-value teal">0 missed payments, 18 mo</span></div>
-<div class="data-row"><span class="data-label">Bank account verified</span><span class="data-value teal">Yes (Plaid, 14 mo tenure)</span></div>
-<div class="data-row"><span class="data-label">Employment</span><span class="data-value">W-2, 4 yr tenure (LinkedIn match)</span></div>
-<div class="data-row"><span class="data-label">Branch relationship</span><span class="data-value">Evansville Loan Officer #4421</span></div>
-</div></div>
-<div class="viz-panel"><div class="viz-panel-title">Live Application Signals</div>
-<div class="data-rows">
-<div class="data-row"><span class="data-label">Bureau pull (just now)</span><span class="data-value teal">FICO 641, +9 since last app</span></div>
-<div class="data-row"><span class="data-label">New tradelines (90 days)</span><span class="data-value">2 (auto, retail), both current</span></div>
-<div class="data-row"><span class="data-label">Inquiry velocity (30 days)</span><span class="data-value amber">3 hard pulls (rate shopping)</span></div>
-<div class="data-row"><span class="data-label">Device fingerprint</span><span class="data-value teal">Match to prior session, no anomaly</span></div>
-<div class="data-row"><span class="data-label">Synthetic ID risk</span><span class="data-value teal">0.04 / 1.00 (clean)</span></div>
-<div class="data-row"><span class="data-label">Fraud velocity (24h)</span><span class="data-value teal">No mule cluster hit</span></div>
-</div>
-<div style="margin-top:14px;padding:13px;border-radius:8px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.15);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--teal)">Context signal:</strong> Daniel is a known-good returning customer with an improving credit profile and clean fraud signature. The model should price down from rack rate, not default to it. That decision lives in this context document.</div>
-</div>
-</div></div>
 
 <!-- ══ STAGE 5: FEATURE SERVING ══ -->
-<div class="stage-content" id="stage4">
-<div class="stage-header"><div class="stage-badge badge-features">Stage 5: Feature Serving</div><div class="stage-title">Features hydrated for the Pulse risk + pricing models</div><div class="stage-subtitle">Featureform pulls every feature the credit, fraud, and pricing models need into a single vector. Customer features, bureau features, fraud features, and live application features merge in single-digit milliseconds. Train/serve parity guaranteed. No feature lookups during scoring.</div><span class="component-tag">Featureform</span><span class="component-tag">Redis Online Feature Store</span></div>
-<div class="viz-area" style="flex-direction:column;gap:18px">
-<div class="feat-grid">
-<div class="feat-card"><div class="feat-name">CUSTOMER_LTV_VECTOR</div><div class="feat-desc">Daniel's lifetime relationship value, prior loan profitability, retention bias</div><div class="feat-value-row"><span class="feat-value">[0.71, 0.42, 0.83, ...]</span><span class="feat-latency">0.7 ms</span></div></div>
-<div class="feat-card"><div class="feat-name">PD_MODEL_SCORE</div><div class="feat-desc">Probability of default at 36 months, Pulse risk model v3.2</div><div class="feat-value-row"><span class="feat-value">0.087 (B+ tier)</span><span class="feat-latency">0.4 ms</span></div></div>
-<div class="feat-card"><div class="feat-name">BUREAU_TRENDED_ATTRS</div><div class="feat-desc">Trended attributes from tri-bureau pull, 24 mo trajectory</div><div class="feat-value-row"><span class="feat-value">improving (+12 pts/12mo)</span><span class="feat-latency">0.5 ms</span></div></div>
-<div class="feat-card"><div class="feat-name">SYNTHETIC_ID_RISK</div><div class="feat-desc">Synthetic identity probability from device + behavioral + SSN signals</div><div class="feat-value-row"><span class="feat-value">0.04 / 1.00</span><span class="feat-latency">0.3 ms</span></div></div>
-<div class="feat-card"><div class="feat-name">RETENTION_PROPENSITY</div><div class="feat-desc">Likelihood to refi or take a top-up within 12 months</div><div class="feat-value-row"><span class="feat-value">0.62 (high)</span><span class="feat-latency">0.3 ms</span></div></div>
-<div class="feat-card"><div class="feat-name">PRICE_ELASTICITY_BAND</div><div class="feat-desc">Take-rate model: predicted accept probability across APR offers</div><div class="feat-value-row"><span class="feat-value">elastic, 26-29% APR</span><span class="feat-latency">0.4 ms</span></div></div>
+<div style="{{ s4 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-purple-04);background:rgba(199,149,227,.12);border:1px solid rgba(199,149,227,.25)">Stage 5: Feature serving</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Features hydrated for the Pulse risk + pricing models.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">Featureform pulls every feature the credit, fraud, and pricing models need into a single vector. Customer features, bureau features, fraud features, and live application features merge in single-digit milliseconds. Train/serve parity guaranteed. No feature lookups during scoring.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Featureform</span><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Redis online feature store</span></div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:18px">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px">
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:11px;font-weight:700;color:var(--rd-purple-04);letter-spacing:.5px;margin-bottom:4px">CUSTOMER_LTV_VECTOR</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px;line-height:1.45">Daniel's lifetime relationship value, prior loan profitability, retention bias</div><div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--rd-dusk-07)"><span style="font-family:var(--rd-font-mono);font-size:12px;font-weight:700;color:var(--rd-white)">[0.71, 0.42, 0.83, ...]</span><span style="font-family:var(--rd-font-mono);font-size:10px;color:var(--rd-blue-03)">0.7 ms</span></div></div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:11px;font-weight:700;color:var(--rd-purple-04);letter-spacing:.5px;margin-bottom:4px">PD_MODEL_SCORE</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px;line-height:1.45">Probability of default at 36 months, Pulse risk model v3.2</div><div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--rd-dusk-07)"><span style="font-family:var(--rd-font-mono);font-size:12px;font-weight:700;color:var(--rd-white)">0.087 (B+ tier)</span><span style="font-family:var(--rd-font-mono);font-size:10px;color:var(--rd-blue-03)">0.4 ms</span></div></div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:11px;font-weight:700;color:var(--rd-purple-04);letter-spacing:.5px;margin-bottom:4px">BUREAU_TRENDED_ATTRS</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px;line-height:1.45">Trended attributes from tri-bureau pull, 24 mo trajectory</div><div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--rd-dusk-07)"><span style="font-family:var(--rd-font-mono);font-size:12px;font-weight:700;color:var(--rd-white)">improving (+12 pts/12mo)</span><span style="font-family:var(--rd-font-mono);font-size:10px;color:var(--rd-blue-03)">0.5 ms</span></div></div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:11px;font-weight:700;color:var(--rd-purple-04);letter-spacing:.5px;margin-bottom:4px">SYNTHETIC_ID_RISK</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px;line-height:1.45">Synthetic identity probability from device + behavioral + SSN signals</div><div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--rd-dusk-07)"><span style="font-family:var(--rd-font-mono);font-size:12px;font-weight:700;color:var(--rd-white)">0.04 / 1.00</span><span style="font-family:var(--rd-font-mono);font-size:10px;color:var(--rd-blue-03)">0.3 ms</span></div></div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:11px;font-weight:700;color:var(--rd-purple-04);letter-spacing:.5px;margin-bottom:4px">RETENTION_PROPENSITY</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px;line-height:1.45">Likelihood to refi or take a top-up within 12 months</div><div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--rd-dusk-07)"><span style="font-family:var(--rd-font-mono);font-size:12px;font-weight:700;color:var(--rd-white)">0.62 (high)</span><span style="font-family:var(--rd-font-mono);font-size:10px;color:var(--rd-blue-03)">0.3 ms</span></div></div>
+      <div style="padding:16px 18px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:11px;font-weight:700;color:var(--rd-purple-04);letter-spacing:.5px;margin-bottom:4px">PRICE_ELASTICITY_BAND</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px;line-height:1.45">Take-rate model: predicted accept probability across APR offers</div><div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--rd-dusk-07)"><span style="font-family:var(--rd-font-mono);font-size:12px;font-weight:700;color:var(--rd-white)">elastic, 26-29% APR</span><span style="font-family:var(--rd-font-mono);font-size:10px;color:var(--rd-blue-03)">0.4 ms</span></div></div>
+    </div>
+    <div style="border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Feature serving performance</div>
+      <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--rd-dusk-05);margin-bottom:4px;font-family:var(--rd-font-mono);text-transform:uppercase;letter-spacing:1px">Total features hydrated</div><div style="font-size:28px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono)">218</div></div>
+        <div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--rd-dusk-05);margin-bottom:4px;font-family:var(--rd-font-mono);text-transform:uppercase;letter-spacing:1px">P99 lookup latency</div><div style="font-size:28px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono)">3.1 ms</div></div>
+        <div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--rd-dusk-05);margin-bottom:4px;font-family:var(--rd-font-mono);text-transform:uppercase;letter-spacing:1px">Feature access budget</div><div style="font-size:28px;font-weight:600;color:var(--rd-hyper-05);font-family:var(--rd-font-mono)">under 75 ms</div></div>
+        <div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--rd-dusk-05);margin-bottom:4px;font-family:var(--rd-font-mono);text-transform:uppercase;letter-spacing:1px">Online / offline parity</div><div style="font-size:28px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono)">100%</div></div>
+      </div>
+      <div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(199,149,227,.06);border:1px solid rgba(199,149,227,.16);font-size:11px;color:var(--rd-dusk-04);line-height:1.5"><strong style="color:var(--rd-purple-04)">For your ML team:</strong> Same Featureform definitions for training in Snowflake and serving in Pulse. Zero training-serving drift. The Pulse risk model team can ship a new feature in days, not quarters.</div>
+    </div>
+  </div>
 </div>
-<div class="viz-panel" style="flex:0">
-<div class="viz-panel-title">Feature Serving Performance</div>
-<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
-<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Total Features Hydrated</div><div style="font-size:28px;font-weight:700;color:var(--text);font-family:var(--mono)">218</div></div>
-<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">P99 Lookup Latency</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">3.1 ms</div></div>
-<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Feature Access Budget</div><div style="font-size:28px;font-weight:700;color:var(--orange);font-family:var(--mono)">&lt;75 ms</div></div>
-<div style="flex:1;min-width:160px"><div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Online / Offline Parity</div><div style="font-size:28px;font-weight:700;color:var(--teal);font-family:var(--mono)">100%</div></div>
-</div>
-<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(79,140,255,.05);border:1px solid rgba(79,140,255,.12);font-size:11px;color:var(--text2);line-height:1.5"><strong style="color:var(--blue)">For your ML team:</strong> Same Featureform definitions for training in Snowflake and serving in Pulse. Zero training-serving drift. The Pulse risk model team can ship a new feature in days, not quarters.</div>
-</div>
-</div></div>
 
 <!-- ══ STAGE 6: OFFER RANKING ══ -->
-<div class="stage-content" id="stage5">
-<div class="stage-header"><div class="stage-badge badge-ranking">Stage 6: Offer Ranking</div><div class="stage-title">Three offers scored, suppressed, and ranked in real time</div><div class="stage-subtitle">Pulse generates the candidate offer set across amount, term, and APR. Policy guardrails suppress non-compliant combinations (state APR caps, DTI ceilings, regulatory holds). The ML ranker scores each surviving offer by the joint likelihood of acceptance, repayment, and lifetime value contribution. The winner goes to the channel.</div><span class="component-tag">ML Ranker</span><span class="component-tag">Pricing Engine</span><span class="component-tag">Policy Engine</span></div>
-<div class="viz-area" style="flex-direction:column;gap:20px">
-<div style="display:flex;gap:10px;flex-wrap:wrap">
-<div style="padding:7px 14px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid var(--border);font-size:12px;color:var(--text2)">312 candidate offer combinations</div>
-<div style="padding:7px 14px;border-radius:6px;background:rgba(220,56,44,.06);border:1px solid rgba(220,56,44,.12);font-size:12px;color:var(--red)">94 suppressed (state cap, DTI, holds)</div>
-<div style="padding:7px 14px;border-radius:6px;background:rgba(255,188,87,.06);border:1px solid rgba(255,188,87,.12);font-size:12px;color:var(--amber)">218 surviving offers scored</div>
-<div style="padding:7px 14px;border-radius:6px;background:rgba(0,201,167,.06);border:1px solid rgba(0,201,167,.12);font-size:12px;color:var(--teal)">Top 3 surfaced, 1 served</div>
+<div style="{{ s5 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-purple-04);background:rgba(199,149,227,.12);border:1px solid rgba(199,149,227,.25)">Stage 6: Offer ranking</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Three offers scored, suppressed, and ranked in real time.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">Pulse generates the candidate offer set across amount, term, and APR. Policy guardrails suppress non-compliant combinations (state APR caps, DTI ceilings, regulatory holds). The ML ranker scores each surviving offer by the joint likelihood of acceptance, repayment, and lifetime value contribution. The winner goes to the channel.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">ML ranker</span><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Pricing engine</span><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Policy engine</span></div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="padding:7px 14px;border-radius:5px;background:rgba(255,255,255,.03);border:1px solid var(--rd-dusk-07);font-size:12px;color:var(--rd-dusk-04)">312 candidate offer combinations</div>
+      <div style="padding:7px 14px;border-radius:5px;background:rgba(255,68,56,.06);border:1px solid rgba(255,68,56,.14);font-size:12px;color:var(--rd-hyper-05)">94 suppressed (state cap, DTI, holds)</div>
+      <div style="padding:7px 14px;border-radius:5px;background:rgba(220,255,30,.06);border:1px solid rgba(220,255,30,.16);font-size:12px;color:var(--rd-yellow-05)">218 surviving offers scored</div>
+      <div style="padding:7px 14px;border-radius:5px;background:rgba(128,219,255,.06);border:1px solid rgba(128,219,255,.16);font-size:12px;color:var(--rd-blue-03)">Top 3 surfaced, 1 served</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <div style="border-radius:8px;padding:18px;background:rgba(128,219,255,.05);border:1px solid var(--rd-blue-03)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;color:var(--rd-blue-03);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase">#1 Winning offer</div><div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--rd-font-mono);margin-bottom:10px;background:rgba(128,219,255,.15);color:var(--rd-blue-03)">Personal loan · unsecured</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">$14,000 / 48 mo / 26.9% APR</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:12px">Monthly payment: $385 · all-in lift: +$2,840 NIM</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px">Returning customer discount applied (-180 bps from rack). PD model: 8.7%. Predicted accept: 71%. Branch officer can match in person if needed.</div><div style="height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px"><div style="height:100%;border-radius:3px;width:94%;background:var(--rd-blue-03)"></div></div><div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--rd-font-mono);color:var(--rd-dusk-06)"><span>Joint score</span><span style="color:var(--rd-blue-03)">94%</span></div></div>
+      <div style="border-radius:8px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;color:var(--rd-dusk-05);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase">#2 Runner-up</div><div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--rd-font-mono);margin-bottom:10px;background:rgba(220,255,30,.15);color:var(--rd-yellow-05)">Personal loan · unsecured</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">$10,000 / 36 mo / 24.9% APR</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:12px">Monthly payment: $397 · all-in lift: +$1,920 NIM</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px">Lower-risk fallback if Daniel rejects #1. Tighter term, lower APR, lower amount. Predicted accept: 64%.</div><div style="height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px"><div style="height:100%;border-radius:3px;width:81%;background:var(--rd-yellow-05)"></div></div><div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--rd-font-mono);color:var(--rd-dusk-06)"><span>Joint score</span><span style="color:var(--rd-yellow-05)">81%</span></div></div>
+      <div style="border-radius:8px;padding:18px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;color:var(--rd-dusk-05);margin-bottom:8px;letter-spacing:1px;text-transform:uppercase">#3 Stretch / NBA</div><div style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;font-family:var(--rd-font-mono);margin-bottom:10px;background:rgba(199,149,227,.15);color:var(--rd-purple-04)">Loan + BrightWay card</div><div style="font-size:15px;font-weight:600;margin-bottom:4px">$14,000 loan + $2K card pre-approval</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:12px">Cross-sell next-best-action · LTV +$680 over 24 mo</div><div style="font-size:11px;color:var(--rd-dusk-06);margin-bottom:8px">NBA layer adds the BrightWay card pre-approval to the offer flow. Suppressed for first session, queued for post-funding follow-up.</div><div style="height:5px;border-radius:3px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px"><div style="height:100%;border-radius:3px;width:73%;background:var(--rd-purple-04)"></div></div><div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--rd-font-mono);color:var(--rd-dusk-06)"><span>Joint score</span><span style="color:var(--rd-purple-04)">73%</span></div></div>
+    </div>
+  </div>
 </div>
-<div class="content-grid">
-<div class="content-card winner"><div class="content-rank">#1 Winning Offer</div><div class="content-source" style="background:rgba(0,201,167,.15);color:var(--teal)">Personal Loan &middot; Unsecured</div><div class="content-title">$14,000 / 48 mo / 26.9% APR</div><div class="content-meta">Monthly payment: $385 | All-in lift: +$2,840 NIM</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Returning customer discount applied (-180 bps from rack). PD model: 8.7%. Predicted accept: 71%. Branch officer can match in person if needed.</div><div class="score-bar"><div class="score-fill" style="--score:94%;background:var(--teal)"></div></div><div class="score-label"><span>Joint score</span><span style="color:var(--teal)">94%</span></div></div>
-<div class="content-card"><div class="content-rank">#2 Runner-up</div><div class="content-source" style="background:rgba(255,188,87,.15);color:var(--amber)">Personal Loan &middot; Unsecured</div><div class="content-title">$10,000 / 36 mo / 24.9% APR</div><div class="content-meta">Monthly payment: $397 | All-in lift: +$1,920 NIM</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">Lower-risk fallback if Daniel rejects #1. Tighter term, lower APR, lower amount. Predicted accept: 64%.</div><div class="score-bar"><div class="score-fill" style="--score:81%;background:var(--amber)"></div></div><div class="score-label"><span>Joint score</span><span style="color:var(--amber)">81%</span></div></div>
-<div class="content-card"><div class="content-rank">#3 Stretch / NBA</div><div class="content-source" style="background:rgba(167,139,250,.15);color:var(--purple)">Loan + BrightWay Card</div><div class="content-title">$14,000 loan + $2K card pre-approval</div><div class="content-meta">Cross-sell next-best-action | LTV +$680 over 24 mo</div><div style="font-size:11px;color:var(--text3);margin-bottom:8px">NBA layer adds the BrightWay card pre-approval to the offer flow. Suppressed for first session, queued for post-funding follow-up.</div><div class="score-bar"><div class="score-fill" style="--score:73%;background:var(--purple)"></div></div><div class="score-label"><span>Joint score</span><span style="color:var(--purple)">73%</span></div></div>
-</div>
-</div></div>
 
 <!-- ══ STAGE 7: RISK-ADJUSTED NIM ══ -->
-<div class="stage-content" id="stage6">
-<div class="stage-header"><div class="stage-badge badge-revenue">Stage 7: Risk-Adjusted NIM</div><div class="stage-title">Pricing meets the loss curve</div><div class="stage-subtitle">OneMain optimizes for risk-adjusted net interest margin, not just APR. The pricing engine balances accept probability against expected loss, prepayment risk, and customer LTV. Returning-customer discounts and behavioral signals shift the offer down from rack rate where the math says it should.</div><span class="component-tag">Pricing Engine</span><span class="component-tag">PD / LGD Models</span></div>
-<div class="viz-area">
-<div class="viz-panel" style="flex:2"><div class="viz-panel-title">Risk-Adjusted Pricing Logic</div>
-<div class="data-rows" style="margin-bottom:20px">
-<div class="data-row"><span class="data-label">Rack rate (FICO 641, $14K, 48mo)</span><span class="data-value">28.7% APR</span></div>
-<div class="data-row"><span class="data-label">Returning customer discount</span><span class="data-value teal">-120 bps (clean prior loan)</span></div>
-<div class="data-row"><span class="data-label">Improving bureau trend</span><span class="data-value teal">-60 bps (+9 FICO since last app)</span></div>
-<div class="data-row"><span class="data-label">Verified income + employment</span><span class="data-value teal">No risk premium added</span></div>
-<div class="data-row"><span class="data-label">Synthetic ID + fraud check</span><span class="data-value teal">Clean, no fraud surcharge</span></div>
-<div class="data-row"><span class="data-label">State APR ceiling (Indiana)</span><span class="data-value">36% (well within)</span></div>
-<div class="data-row"><span class="data-label">Final priced APR</span><span class="data-value teal">26.9% APR</span></div>
+<div style="{{ s6 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-yellow-05);background:rgba(220,255,30,.1);border:1px solid rgba(220,255,30,.22)">Stage 7: Risk-adjusted NIM</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Pricing meets the loss curve.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">OneMain optimizes for risk-adjusted net interest margin, not just APR. The pricing engine balances accept probability against expected loss, prepayment risk, and customer LTV. Returning-customer discounts and behavioral signals shift the offer down from rack rate where the math says it should.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">Pricing engine</span><span style="display:inline-flex;align-items:center;padding:4px 12px;border-radius:5px;font-size:12px;font-weight:600;font-family:var(--rd-font-mono);background:rgba(255,68,56,.1);color:var(--rd-hyper-05);border:1px solid rgba(255,68,56,.18)">PD / LGD models</span></div>
+  </div>
+  <div style="flex:1;display:flex;gap:24px;align-items:stretch">
+    <div style="flex:2;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Risk-adjusted pricing logic</div>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Rack rate (FICO 641, $14K, 48mo)</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">28.7% APR</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Returning customer discount</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">-120 bps (clean prior loan)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Improving bureau trend</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">-60 bps (+9 FICO since last app)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Verified income + employment</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">No risk premium added</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">Synthetic ID + fraud check</span><span style="font-size:12px;font-weight:600;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">Clean, no fraud surcharge</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);gap:12px"><span style="font-size:13px;color:var(--rd-dusk-04);font-weight:500">State APR ceiling (Indiana)</span><span style="font-size:12px;font-weight:600;color:var(--rd-white);font-family:var(--rd-font-mono);text-align:right">36% (well within)</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-radius:8px;background:rgba(128,219,255,.06);border:1px solid rgba(128,219,255,.18);gap:12px"><span style="font-size:13px;color:var(--rd-white);font-weight:600">Final priced APR</span><span style="font-size:12px;font-weight:700;color:var(--rd-blue-03);font-family:var(--rd-font-mono);text-align:right">26.9% APR</span></div>
+      </div>
+      <div style="font-size:13px;color:var(--rd-dusk-04);line-height:1.6;padding:16px;border-radius:8px;background:rgba(220,255,30,.05);border:1px solid rgba(220,255,30,.16)"><strong style="color:var(--rd-yellow-05)">The key insight:</strong> A 180 bps discount looks like leakage on a static spreadsheet. In the model, it lifts predicted accept from 51% to 71%, which adds <strong style="color:var(--rd-blue-03)">$2,840 of risk-adjusted NIM</strong> on this single loan. Multiplied across millions of applications, this is the difference between Pulse paying for itself and Pulse becoming a P&amp;L line.</div>
+    </div>
+    <div style="flex:1;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07);padding:26px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:18px;font-family:var(--rd-font-mono)">Per-application impact</div>
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:20px;align-items:center;margin-top:16px">
+        <div style="padding:22px;border-radius:8px;text-align:center;background:rgba(255,255,255,.03);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px;color:var(--rd-dusk-05)">$1,460</div><div style="font-size:12px;color:var(--rd-dusk-06)">Static rack-rate offer<br>Daniel rate-shops, abandons</div></div>
+        <div style="font-size:28px;color:var(--rd-blue-03)">→</div>
+        <div style="padding:22px;border-radius:8px;text-align:center;background:rgba(128,219,255,.05);border:1px solid rgba(128,219,255,.2)"><div style="font-family:var(--rd-font-mono);font-size:36px;font-weight:700;line-height:1;margin-bottom:6px;color:var(--rd-blue-03)">$2,840</div><div style="font-size:12px;color:var(--rd-dusk-06)">Pulse risk-adjusted offer<br>Daniel funds, retains</div></div>
+      </div>
+      <div style="margin-top:18px;font-size:12px;color:var(--rd-dusk-06);line-height:1.6;text-align:center">Per-application NIM lift, applied across <strong style="color:var(--rd-white)">millions of digital + branch + dealer applications</strong> = the real Pulse business case.</div>
+    </div>
+  </div>
 </div>
-<div style="font-size:13px;color:var(--text2);line-height:1.6;padding:16px;border-radius:10px;background:rgba(255,188,87,.05);border:1px solid rgba(255,188,87,.12)"><strong style="color:var(--amber)">The key insight:</strong> A 180 bps discount looks like leakage on a static spreadsheet. In the model, it lifts predicted accept from 51% to 71%, which adds <strong style="color:var(--teal)">$2,840 of risk-adjusted NIM</strong> on this single loan. Multiplied across millions of applications, this is the difference between Pulse paying for itself and Pulse becoming a P&L line.</div>
-</div>
-<div class="viz-panel"><div class="viz-panel-title">Per-Application Impact</div>
-<div class="rev-compare">
-<div class="rev-card before"><div class="rev-value" style="color:var(--text3)">$1,460</div><div class="rev-label">Static rack-rate offer<br>Daniel rate-shops, abandons</div></div>
-<div class="rev-arrow">&rarr;</div>
-<div class="rev-card after"><div class="rev-value" style="color:var(--teal)">$2,840</div><div class="rev-label">Pulse risk-adjusted offer<br>Daniel funds, retains</div></div>
-</div>
-<div style="margin-top:18px;font-size:12px;color:var(--text3);line-height:1.6;text-align:center">Per-application NIM lift, applied across <strong style="color:var(--text)">millions of digital + branch + dealer applications</strong> = the real Pulse business case.</div>
-</div>
-</div></div>
 
 <!-- ══ STAGE 8: OUTCOME ══ -->
-<div class="stage-content" id="stage7">
-<div class="stage-header"><div class="stage-badge badge-outcome">Stage 8: Outcome</div><div class="stage-title">Daniel's loan offer, two ways</div><div class="stage-subtitle">Same applicant. Same moment. Two different decisioning paths. The legacy Postgres path misses the SLA, defaults to a generic rack-rate offer, and loses the customer to a competitor. The Pulse + Redis path delivers a personalized, risk-priced, returning-customer offer in under 7 seconds. Funded.</div></div>
-<div class="outcome-split">
+<div style="{{ s7 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-purple-04);background:rgba(199,149,227,.12);border:1px solid rgba(199,149,227,.25)">Stage 8: Outcome</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Daniel's loan offer, two ways.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">Same applicant. Same moment. Two different decisioning paths. The legacy Postgres path misses the SLA, defaults to a generic rack-rate offer, and loses the customer to a competitor. The Pulse + Redis path delivers a personalized, risk-priced, returning-customer offer in under 7 seconds. Funded.</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--rd-font-mono);text-align:center;background:rgba(255,255,255,.04);color:var(--rd-dusk-05);border:1px solid var(--rd-dusk-07)">Legacy decisioning path</div>
+      <div style="background:#FAFBFC;border-radius:8px;border:2px solid rgba(120,120,130,.4);overflow:hidden;color:#1A1A1A">
+        <div style="padding:18px 24px;background:#4B5563;display:flex;align-items:center;justify-content:space-between"><div style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.5px">ONEMAIN <span style="color:#9CA3AF">(legacy)</span></div><div style="color:rgba(255,255,255,.75);font-size:11px;font-family:var(--rd-font-mono)">DECISION TIMEOUT · 9.4 sec</div></div>
+        <div style="padding:22px 24px">
+          <div style="display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid #E5E7EB;margin-bottom:16px"><div style="width:42px;height:42px;border-radius:8px;background:#6B7280;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0">DV</div><div><div style="font-size:14px;font-weight:700;color:#1A1A1A">Daniel Voss</div><div style="font-size:11px;color:#6B7280;margin-top:2px;font-family:var(--rd-font-mono)">Existing customer · Evansville, IN · $14,000 request</div></div></div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Feature access (Postgres p95)</span><span style="color:#A8261D;font-weight:600;font-family:var(--rd-font-mono);text-align:right">3,420 ms</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Returning-customer signals</span><span style="color:#A8261D;font-weight:600;font-family:var(--rd-font-mono);text-align:right">Not loaded in time</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Pricing logic path</span><span style="color:#A8261D;font-weight:600;font-family:var(--rd-font-mono);text-align:right">Defaulted to rack rate</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Offer presented</span><span style="color:#1A1A1A;font-weight:600;font-family:var(--rd-font-mono);text-align:right">$14,000 / 48 mo / 28.7% APR</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Time to decision</span><span style="color:#A8261D;font-weight:600;font-family:var(--rd-font-mono);text-align:right">9.4 sec (over SLA)</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Applicant action</span><span style="color:#A8261D;font-weight:600;font-family:var(--rd-font-mono);text-align:right">Abandoned, opened LendingClub</span></div>
+          </div>
+          <div style="padding:16px;border-radius:8px;text-align:center;margin-top:14px;background:rgba(120,120,130,.08);border:2px solid rgba(120,120,130,.3)"><div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;font-family:var(--rd-font-mono);color:#6B7280">Outcome</div><div style="font-size:22px;font-weight:800;letter-spacing:.5px;color:#4B5563">LOST</div><div style="font-size:11px;color:#6B7280;margin-top:6px;line-height:1.4">Generic rack-rate offer + missed SLA = customer chooses a competitor's pre-qualified offer.</div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;padding:16px;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--rd-dusk-07)">
+        <div style="flex:1;text-align:center"><div style="font-family:var(--rd-font-mono);font-size:20px;font-weight:700;line-height:1;color:var(--rd-dusk-05)">$0</div><div style="font-size:10px;color:var(--rd-dusk-06);margin-top:4px">Funded NIM</div></div>
+        <div style="flex:1;text-align:center"><div style="font-family:var(--rd-font-mono);font-size:20px;font-weight:700;line-height:1;color:var(--rd-dusk-05)">9.4 s</div><div style="font-size:10px;color:var(--rd-dusk-06);margin-top:4px">Decision time</div></div>
+        <div style="flex:1;text-align:center"><div style="font-family:var(--rd-font-mono);font-size:20px;font-weight:700;line-height:1;color:var(--rd-dusk-05)">-1</div><div style="font-size:10px;color:var(--rd-dusk-06);margin-top:4px">Customer lost</div></div>
+      </div>
+    </div>
 
-<!-- LEGACY -->
-<div class="outcome-col">
-<div class="outcome-header generic">Legacy Decisioning Path</div>
-<div class="app-screen declined">
-<div class="app-header" style="background:#4B5563"><div class="app-brand">ONEMAIN <span style="color:#9CA3AF">(legacy)</span></div><div class="app-step">DECISION TIMEOUT &middot; 9.4 sec</div></div>
-<div class="app-body">
-<div class="app-applicant"><div class="app-avatar-sm" style="background:linear-gradient(135deg,#4B5563,#6B7280)">DV</div><div><div class="app-applicant-name">Daniel Voss</div><div class="app-applicant-info">Existing customer &middot; Evansville, IN &middot; $14,000 request</div></div></div>
-<div class="app-fields">
-<div class="app-field"><span class="app-field-label">Feature access (Postgres p95)</span><span class="app-field-value" style="color:#A8261D">3,420 ms</span></div>
-<div class="app-field"><span class="app-field-label">Returning-customer signals</span><span class="app-field-value" style="color:#A8261D">Not loaded in time</span></div>
-<div class="app-field"><span class="app-field-label">Pricing logic path</span><span class="app-field-value" style="color:#A8261D">Defaulted to rack rate</span></div>
-<div class="app-field"><span class="app-field-label">Offer presented</span><span class="app-field-value">$14,000 / 48 mo / 28.7% APR</span></div>
-<div class="app-field"><span class="app-field-label">Time to decision</span><span class="app-field-value" style="color:#A8261D">9.4 sec (over SLA)</span></div>
-<div class="app-field"><span class="app-field-label">Applicant action</span><span class="app-field-value" style="color:#A8261D">Abandoned, opened LendingClub</span></div>
-</div>
-<div class="app-decision decline"><div class="app-decision-label">Outcome</div><div class="app-decision-value">LOST</div><div class="app-decision-detail">Generic rack-rate offer + missed SLA = customer chooses a competitor's pre-qualified offer.</div></div>
-</div>
-</div>
-<div class="outcome-metrics generic-m">
-<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--text3)">$0</div><div class="outcome-metric-label">Funded NIM</div></div>
-<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--text3)">9.4 s</div><div class="outcome-metric-label">Decision time</div></div>
-<div class="outcome-metric"><div class="outcome-metric-value" style="color:var(--text3)">-1</div><div class="outcome-metric-label">Customer lost</div></div>
-</div>
-</div>
-
-<!-- PULSE + REDIS -->
-<div class="outcome-col">
-<div class="outcome-header personalized">Pulse + Redis Path</div>
-<div class="app-screen approved">
-<div class="app-header"><div class="app-brand">ONEMAIN <span class="gold">PULSE</span></div><div class="app-step">DECISION COMPLETE &middot; 4.2 sec</div></div>
-<div class="app-body">
-<div class="app-applicant"><div class="app-avatar-sm">DV</div><div><div class="app-applicant-name">Welcome back, Daniel</div><div class="app-applicant-info">Existing customer &middot; Evansville, IN &middot; FICO improved +9 since 2024</div></div></div>
-<div class="app-fields">
-<div class="app-field"><span class="app-field-label">Feature access (Redis p99)</span><span class="app-field-value" style="color:#00876A">3.1 ms</span></div>
-<div class="app-field"><span class="app-field-label">Returning-customer discount</span><span class="app-field-value" style="color:#00876A">-180 bps applied</span></div>
-<div class="app-field"><span class="app-field-label">Pricing logic path</span><span class="app-field-value" style="color:#00876A">Risk-adjusted, model-driven</span></div>
-<div class="app-field"><span class="app-field-label">Offer presented</span><span class="app-field-value" style="color:#00876A">$14,000 / 48 mo / 26.9% APR</span></div>
-<div class="app-field"><span class="app-field-label">Time to decision</span><span class="app-field-value" style="color:#00876A">4.2 sec (within SLA)</span></div>
-<div class="app-field"><span class="app-field-label">Applicant action</span><span class="app-field-value" style="color:#00876A">Accepted, e-signed, funded</span></div>
-</div>
-<div class="app-decision approve"><div class="app-decision-label">Outcome</div><div class="app-decision-value">FUNDED</div><div class="app-decision-detail">Personalized offer inside SLA. BrightWay card NBA queued for post-funding cross-sell.</div></div>
-</div>
-</div>
-<div class="outcome-metrics personalized-m">
-<div class="outcome-metric"><div class="outcome-metric-value">$2,840</div><div class="outcome-metric-label">Risk-adjusted NIM</div></div>
-<div class="outcome-metric"><div class="outcome-metric-value">4.2 s</div><div class="outcome-metric-label">Decision time</div></div>
-<div class="outcome-metric"><div class="outcome-metric-value">+1</div><div class="outcome-metric-label">Customer retained</div></div>
-</div>
-</div>
-
-</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="padding:10px 16px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:var(--rd-font-mono);text-align:center;background:rgba(128,219,255,.08);color:var(--rd-blue-03);border:1px solid rgba(128,219,255,.22)">Pulse + Redis path</div>
+      <div style="background:#FAFBFC;border-radius:8px;border:2px solid rgba(15,159,217,.5);overflow:hidden;color:#1A1A1A">
+        <div style="padding:18px 24px;background:#003B5C;display:flex;align-items:center;justify-content:space-between"><div style="color:#fff;font-size:14px;font-weight:800;letter-spacing:.5px">ONEMAIN <span style="color:#FFC72C">PULSE</span></div><div style="color:rgba(255,255,255,.75);font-size:11px;font-family:var(--rd-font-mono)">DECISION COMPLETE · 4.2 sec</div></div>
+        <div style="padding:22px 24px">
+          <div style="display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid #E5E7EB;margin-bottom:16px"><div style="width:42px;height:42px;border-radius:8px;background:#003B5C;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0">DV</div><div><div style="font-size:14px;font-weight:700;color:#1A1A1A">Welcome back, Daniel</div><div style="font-size:11px;color:#6B7280;margin-top:2px;font-family:var(--rd-font-mono)">Existing customer · Evansville, IN · FICO improved +9 since 2024</div></div></div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Feature access (Redis p99)</span><span style="color:#0477A5;font-weight:600;font-family:var(--rd-font-mono);text-align:right">3.1 ms</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Returning-customer discount</span><span style="color:#0477A5;font-weight:600;font-family:var(--rd-font-mono);text-align:right">-180 bps applied</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Pricing logic path</span><span style="color:#0477A5;font-weight:600;font-family:var(--rd-font-mono);text-align:right">Risk-adjusted, model-driven</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Offer presented</span><span style="color:#0477A5;font-weight:600;font-family:var(--rd-font-mono);text-align:right">$14,000 / 48 mo / 26.9% APR</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Time to decision</span><span style="color:#0477A5;font-weight:600;font-family:var(--rd-font-mono);text-align:right">4.2 sec (within SLA)</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #F3F4F6;gap:8px"><span style="color:#6B7280">Applicant action</span><span style="color:#0477A5;font-weight:600;font-family:var(--rd-font-mono);text-align:right">Accepted, e-signed, funded</span></div>
+          </div>
+          <div style="padding:16px;border-radius:8px;text-align:center;margin-top:14px;background:rgba(15,159,217,.08);border:2px solid rgba(15,159,217,.35)"><div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;font-family:var(--rd-font-mono);color:#0477A5">Outcome</div><div style="font-size:22px;font-weight:800;letter-spacing:.5px;color:#0477A5">FUNDED</div><div style="font-size:11px;color:#6B7280;margin-top:6px;line-height:1.4">Personalized offer inside SLA. BrightWay card NBA queued for post-funding cross-sell.</div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;padding:16px;border-radius:8px;background:rgba(128,219,255,.05);border:1px solid rgba(128,219,255,.18)">
+        <div style="flex:1;text-align:center"><div style="font-family:var(--rd-font-mono);font-size:20px;font-weight:700;line-height:1;color:var(--rd-blue-03)">$2,840</div><div style="font-size:10px;color:var(--rd-dusk-06);margin-top:4px">Risk-adjusted NIM</div></div>
+        <div style="flex:1;text-align:center"><div style="font-family:var(--rd-font-mono);font-size:20px;font-weight:700;line-height:1;color:var(--rd-blue-03)">4.2 s</div><div style="font-size:10px;color:var(--rd-dusk-06);margin-top:4px">Decision time</div></div>
+        <div style="flex:1;text-align:center"><div style="font-family:var(--rd-font-mono);font-size:20px;font-weight:700;line-height:1;color:var(--rd-blue-03)">+1</div><div style="font-size:10px;color:var(--rd-dusk-06);margin-top:4px">Customer retained</div></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ══ STAGE 9: ARCHITECTURE RECAP ══ -->
-<div class="stage-content" id="stage8">
-<div class="stage-header"><div class="stage-badge badge-arch">Stage 9: The Architecture, Proven</div><div class="stage-title">Eight stages. Inside the SLA. Funded.</div><div class="stage-subtitle">Every component you just saw running together. DB2, Postgres, Snowflake, the bureaus, and the fraud stack feed Redis. Pulse decides. Web, branch, and dealer channels render. The same fabric extends to fraud, NBA, BrightWay, the ILC deposit platform, and Foursight auto. One real-time decisioning layer for the entire enterprise.</div></div>
-<div class="arch-wrap">
-<div class="arch-frame">
+<div style="{{ s8 }}">
+  <div style="margin-bottom:32px">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px;font-family:var(--rd-font-mono);color:var(--rd-purple-04);background:rgba(199,149,227,.12);border:1px solid rgba(199,149,227,.25)">Stage 9: The architecture, proven</div>
+    <div style="font-size:34px;font-weight:500;line-height:1.15;letter-spacing:-.5px;margin-bottom:10px;color:var(--rd-white)">Eight stages. Inside the SLA. Funded.</div>
+    <div style="font-size:16px;color:var(--rd-dusk-04);line-height:1.6;max-width:860px">Every component you just saw running together. DB2, Postgres, Snowflake, the bureaus, and the fraud stack feed Redis. Pulse decides. Web, branch, and dealer channels render. The same fabric extends to fraud, NBA, BrightWay, the ILC deposit platform, and Foursight auto. One real-time decisioning layer for the entire enterprise.</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;gap:18px">
+    <div style="flex:1;background:rgba(255,255,255,.02);border:1px solid var(--rd-dusk-07);border-radius:12px;padding:34px 30px 26px">
 
-<div class="arch-tier tier-source"><div class="arch-tier-label">Data Sources (Systems of Record)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>DB2 Mainframe</h4><p>Loan core, customer master</p></div>
-<div class="arch-node"><h4>Snowflake</h4><p>Analytical store, model training</p></div>
-<div class="arch-node"><h4>Postgres / Crunchy</h4><p>Operational state (offloading)</p></div>
-<div class="arch-node"><h4>Bureau APIs</h4><p>Equifax, Experian, TransUnion</p></div>
-<div class="arch-node"><h4>Kafka Events</h4><p>Application + fraud signals</p></div>
-</div></div>
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-dusk-05)">Data sources (systems of record)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">DB2 mainframe</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Loan core, customer master</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Snowflake</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Analytical store, model training</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Postgres / Crunchy</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Operational state (offloading)</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Bureau APIs</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Equifax, Experian, TransUnion</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,.1);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,255,255,.04)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:#D8DCE4">Kafka events</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:var(--rd-dusk-06);font-family:var(--rd-font-mono)">Application + fraud signals</p></div>
+      </div></div>
 
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.18)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(255,255,255,.14)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,255,255,.2)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
 
-<div class="arch-tier tier-ingest"><div class="arch-tier-label">Ingest Layer</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>Redis Data Integration (RDI)</h4><p>YAML-defined CDC. DB2, Postgres, Snowflake. OpenShift Helm. Zero custom sync code.</p></div>
-<div class="arch-node"><h4>Featureform</h4><p>Online feature store. Train/serve parity Snowflake to Pulse.</p></div>
-</div></div>
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-hyper-04)">Ingest layer</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,68,56,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,68,56,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-hyper-04)">Redis Data Integration (RDI)</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(253,115,106,.65);font-family:var(--rd-font-mono)">YAML-defined CDC. DB2, Postgres, Snowflake. OpenShift Helm. Zero custom sync code.</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(255,68,56,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(255,68,56,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-hyper-04)">Featureform</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(253,115,106,.65);font-family:var(--rd-font-mono)">Online feature store. Train/serve parity Snowflake to Pulse.</p></div>
+      </div></div>
 
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,56,44,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(255,68,56,.3)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,68,56,.45)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
 
-<div class="arch-tier tier-context"><div class="arch-tier-label">Redis Context Tier (Pulse Operational 360)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>Redis RAM</h4><p>Hot tier, ~128 GB, sub-10ms reads</p></div>
-<div class="arch-node"><h4>Redis Flex</h4><p>Warm tier, 500 GB, replaces Postgres in decision path</p></div>
-<div class="arch-node"><h4>Active-Active</h4><p>Evansville + London KY, 48 prod shards</p></div>
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-blue-03)">Redis context tier (Pulse operational 360)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(128,219,255,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(128,219,255,.07)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-blue-02)">Redis RAM</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(128,219,255,.6);font-family:var(--rd-font-mono)">Hot tier, ~128 GB, sub-10ms reads</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(128,219,255,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(128,219,255,.07)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-blue-02)">Redis Flex</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(128,219,255,.6);font-family:var(--rd-font-mono)">Warm tier, 500 GB, replaces Postgres in decision path</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(128,219,255,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(128,219,255,.07)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-blue-02)">Active-Active</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(128,219,255,.6);font-family:var(--rd-font-mono)">Evansville + London KY, 48 prod shards</p></div>
+      </div>
+      <div style="display:flex;margin-top:6px;border-radius:8px;overflow:hidden;border:1px solid rgba(128,219,255,.15)">
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">RedisJSON</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Streams</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Search</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);border-right:1px solid rgba(128,219,255,.12);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Vectors</div>
+        <div style="flex:1;padding:9px 8px;text-align:center;font-size:10px;font-weight:600;color:rgba(128,219,255,.75);background:rgba(128,219,255,.05);font-family:var(--rd-font-mono);letter-spacing:.3px;text-transform:uppercase">Velocity counters</div>
+      </div></div>
+
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(128,219,255,.3)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(128,219,255,.45)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div style="margin-bottom:2px"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-yellow-05)">Decision engine (Pulse platform)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">Credit policy</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">Eligibility, regulatory guardrails</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">ML risk models</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">PD, LGD, fraud, synthetic ID</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">Pricing engine</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">APR, term, line size optimization</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(220,255,30,.18);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(220,255,30,.06)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-yellow-04)">Fraud stack</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(233,255,114,.55);font-family:var(--rd-font-mono)">Velocity rules, device, mule graph</p></div>
+      </div></div>
+
+      <div style="display:flex;align-items:center;justify-content:center;height:22px;position:relative;margin:6px 0"><div style="width:1px;height:100%;background:rgba(220,255,30,.25)"></div><svg width="16" height="22" viewBox="0 0 16 28" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(220,255,30,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
+
+      <div><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;padding-left:4px;color:var(--rd-purple-04)">Output channels (act)</div>
+      <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap">
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">OneMain web</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Personalized loan offer</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">Branch workstation</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Loan officer screen</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">Dealer (Foursight)</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Auto POS under 3 sec decision</p></div>
+        <div style="flex:1;border-radius:8px;padding:14px;text-align:center;border:1px solid rgba(199,149,227,.2);min-height:64px;display:flex;flex-direction:column;justify-content:center;min-width:120px;background:rgba(199,149,227,.08)"><h4 style="font-size:13px;font-weight:600;margin:0 0 3px;line-height:1.3;color:var(--rd-purple-03)">BrightWay + ILC</h4><p style="font-size:10.5px;line-height:1.4;margin:0;color:rgba(199,149,227,.6);font-family:var(--rd-font-mono)">Card cross-sell, deposit core</p></div>
+      </div></div>
+
+      <div style="margin-top:14px;padding:12px 18px;border-radius:8px;border:1px dashed rgba(255,68,56,.3);background:rgba(255,68,56,.05);display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;color:var(--rd-dusk-04);flex-wrap:wrap"><strong style="color:var(--rd-hyper-05)">Learn:</strong><span>Decision exhaust → Snowflake → model retraining → Featureform redeploys to Redis</span></div>
+
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div style="padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:6px">Feature access (P99)</div><div style="font-size:15px;font-weight:600;color:var(--rd-blue-03)">3.1 ms</div></div>
+      <div style="padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:6px">Decision time</div><div style="font-size:15px;font-weight:600;color:var(--rd-hyper-05)">9.4 s → 4.2 s</div></div>
+      <div style="padding:13px 16px;border-radius:8px;background:rgba(255,255,255,.025);border:1px solid var(--rd-dusk-07)"><div style="font-family:var(--rd-font-mono);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--rd-dusk-05);margin-bottom:6px">NIM per funded loan</div><div style="font-size:15px;font-weight:600;color:var(--rd-yellow-05)">+$2,840</div></div>
+    </div>
+  </div>
 </div>
-<div class="arch-data-strip">
-<div class="arch-data-chip">RedisJSON</div>
-<div class="arch-data-chip">Streams</div>
-<div class="arch-data-chip">Search</div>
-<div class="arch-data-chip">Vectors</div>
-<div class="arch-data-chip">Velocity Counters</div>
-</div></div>
-
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(0,201,167,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
-
-<div class="arch-tier tier-decide"><div class="arch-tier-label">Decision Engine (Pulse Platform)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>Credit Policy</h4><p>Eligibility, regulatory guardrails</p></div>
-<div class="arch-node"><h4>ML Risk Models</h4><p>PD, LGD, fraud, synthetic ID</p></div>
-<div class="arch-node"><h4>Pricing Engine</h4><p>APR, term, line size optimization</p></div>
-<div class="arch-node"><h4>Fraud Stack</h4><p>Velocity rules, device, mule graph</p></div>
-</div></div>
-
-<div class="arch-flow-arrow"><svg width="16" height="22" viewBox="0 0 16 28"><path d="M8 0V24M3 19L8 24L13 19" stroke="rgba(255,188,87,.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg></div>
-
-<div class="arch-tier tier-act"><div class="arch-tier-label">Output Channels (Act)</div>
-<div class="arch-tier-row">
-<div class="arch-node"><h4>OneMain Web</h4><p>Personalized loan offer</p></div>
-<div class="arch-node"><h4>Branch Workstation</h4><p>Loan officer screen</p></div>
-<div class="arch-node"><h4>Dealer (Foursight)</h4><p>Auto POS &lt;3 sec decision</p></div>
-<div class="arch-node"><h4>BrightWay + ILC</h4><p>Card cross-sell, deposit core</p></div>
-</div></div>
-
-<div class="arch-feedback"><div class="arch-feedback-icon">&#x21BA;</div><span><strong style="color:var(--red)">Learn:</strong>&nbsp; Decision exhaust &rarr; Snowflake &rarr; Model retraining &rarr; Featureform redeploys to Redis</span></div>
-
-</div>
-<div class="arch-callouts">
-<div class="arch-callout"><div class="arch-callout-label">Feature Access (P99)</div><div class="arch-callout-value teal">3.1 ms</div></div>
-<div class="arch-callout"><div class="arch-callout-label">Decision Time</div><div class="arch-callout-value orange">9.4 s &rarr; 4.2 s</div></div>
-<div class="arch-callout"><div class="arch-callout-label">NIM Per Funded Loan</div><div class="arch-callout-value amber">+$2,840</div></div>
-</div>
-</div>
-</div>
 
 </div>
 
-<div class="nav-bar"><div class="nav-hint">Press <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or click to navigate</div><div class="nav-buttons"><button class="nav-btn back" id="btnBack" onclick="navigate(-1)" disabled>&larr; Back</button><button class="nav-btn next" id="btnNext" onclick="navigate(1)">Next &rarr;</button></div></div>
+<!-- NAV BAR -->
+<div style="display:flex;justify-content:space-between;align-items:center;padding:20px 40px;border-top:1px solid var(--rd-dusk-07);background:rgba(9,26,35,.95);backdrop-filter:blur(20px);position:sticky;bottom:0;z-index:50">
+  <div style="font-size:13px;color:var(--rd-dusk-06)">Press <kbd style="display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--rd-dusk-07);font-family:var(--rd-font-mono);font-size:11px;color:var(--rd-dusk-04);margin:0 2px">←</kbd> <kbd style="display:inline-block;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,.07);border:1px solid var(--rd-dusk-07);font-family:var(--rd-font-mono);font-size:11px;color:var(--rd-dusk-04);margin:0 2px">→</kbd> or click to navigate</div>
+  <div style="display:flex;gap:12px">
+    <button style="padding:11px 26px;border-radius:5px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:var(--rd-font-sans);background:rgba(255,255,255,.06);color:var(--rd-dusk-04);border:1px solid var(--rd-dusk-07)" style="{{ backStyle }}" onClick="{{ onBack }}">← Back</button>
+    <button style="padding:11px 26px;border-radius:5px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:var(--rd-font-sans);border:none" style="{{ nextStyle }}" onClick="{{ onNext }}">{{ nextLabel }}</button>
+  </div>
+</div>
 
-<script>
-let current=0;const total=9;
-const latencies=['<7s SLA','0.2ms','1.4ms','2.8ms','3.1ms','5.2ms','6.0ms','4.2s','4.2s'];
-function navigate(d){const n=current+d;if(n<0||n>=total)return;document.getElementById('stage'+current).classList.remove('active');current=n;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
-function goTo(s){if(s===current)return;document.getElementById('stage'+current).classList.remove('active');current=s;const el=document.getElementById('stage'+current);el.classList.remove('active');void el.offsetWidth;el.classList.add('active');updateUI()}
-function updateUI(){document.querySelectorAll('.progress-step').forEach((s,i)=>{s.classList.remove('active','done');if(i===current)s.classList.add('active');else if(i<current)s.classList.add('done')});document.getElementById('stageCounter').textContent=(current+1)+' / '+total;document.getElementById('globalLatency').textContent=latencies[current];const back=document.getElementById('btnBack');const next=document.getElementById('btnNext');back.disabled=current===0;if(current===total-1){next.textContent='Restart';next.className='nav-btn restart';next.onclick=function(){document.getElementById('stage'+current).classList.remove('active');current=0;const el=document.getElementById('stage0');el.classList.remove('active');void el.offsetWidth;el.classList.add('active');next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)};updateUI()}}else{next.textContent='Next \u2192';next.className='nav-btn next';next.onclick=function(){navigate(1)}}}
-document.querySelectorAll('.progress-step').forEach(s=>{s.addEventListener('click',()=>goTo(parseInt(s.dataset.step)))});
-document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();document.getElementById('btnNext').click()}if(e.key==='ArrowLeft'){e.preventDefault();navigate(-1)}});
-updateUI();
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { current: 0 };
+
+  get total() { return 9; }
+  get labels() { return ['Architecture','Application Submit','Ingest','Context','Feature Serving','Offer Ranking','Risk-Adj NIM','Outcome','Architecture Recap']; }
+  get latencies() { return ['<7s SLA','0.2ms','1.4ms','2.8ms','3.1ms','5.2ms','6.0ms','4.2s','4.2s']; }
+
+  componentDidMount() {
+    this._key = (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.onNext(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); this.go(this.state.current - 1); }
+    };
+    document.addEventListener('keydown', this._key);
+  }
+  componentWillUnmount() { document.removeEventListener('keydown', this._key); }
+
+  go(n) { if (n < 0 || n >= this.total) return; this.setState({ current: n }); }
+  onNext() {
+    const c = this.state.current;
+    if (c >= this.total - 1) this.setState({ current: 0 });
+    else this.go(c + 1);
+  }
+
+  renderVals() {
+    const current = this.state.current;
+    const hidden = { display: 'none' };
+    const active = { display: 'flex', flexDirection: 'column', flex: 1, animation: 'fadeUp .5s cubic-bezier(.16,1,.3,1)' };
+    const out = {};
+    for (let i = 0; i < this.total; i++) out['s' + i] = i === current ? active : hidden;
+
+    const steps = this.labels.map((label, i) => {
+      const a = i === current, d = i < current;
+      return {
+        num: i + 1,
+        label,
+        onClick: () => this.go(i),
+        style: {
+          flex: 1, minWidth: '110px', padding: '14px 10px', display: 'flex', alignItems: 'center',
+          gap: '8px', fontSize: '11px', fontWeight: 600, letterSpacing: '.3px', position: 'relative',
+          cursor: 'pointer', fontFamily: 'var(--rd-font-mono)', transition: 'color .3s',
+          color: a ? '#fff' : d ? 'var(--rd-blue-03)' : 'var(--rd-dusk-06)'
+        },
+        numStyle: a
+          ? { background: 'var(--rd-hyper-05)', borderColor: 'var(--rd-hyper-05)', color: '#fff' }
+          : d
+            ? { background: 'var(--rd-blue-03)', borderColor: 'var(--rd-blue-03)', color: 'var(--rd-midnight-base)' }
+            : { background: 'rgba(255,255,255,.05)', borderColor: 'var(--rd-dusk-07)', color: 'var(--rd-dusk-06)' },
+        barStyle: {
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '2px', transformOrigin: 'left',
+          transition: 'transform .5s cubic-bezier(.16,1,.3,1)',
+          transform: (a || d) ? 'scaleX(1)' : 'scaleX(0)',
+          background: d ? 'var(--rd-blue-03)' : 'var(--rd-hyper-05)'
+        }
+      };
+    });
+
+    return {
+      ...out,
+      steps,
+      counter: (current + 1) + ' / ' + this.total,
+      latency: this.latencies[current],
+      backStyle: current === 0 ? { opacity: .3, cursor: 'not-allowed', pointerEvents: 'none' } : {},
+      onBack: () => this.go(current - 1),
+      onNext: () => this.onNext(),
+      nextLabel: current === this.total - 1 ? 'Restart' : 'Next →',
+      nextStyle: current === this.total - 1
+        ? { background: 'var(--rd-blue-03)', color: 'var(--rd-midnight-base)' }
+        : { background: 'var(--rd-hyper-05)', color: '#fff' }
+    };
+  }
+}
 </script>
 </body>
 </html>
