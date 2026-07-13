@@ -1,0 +1,26 @@
+/* ============================================================
+   REDIS DESIGN SYSTEM — FONTS
+   Sans + Mono load from Google Fonts. Display = TT Trailers
+   (LICENSED, self-hosted in assets/fonts/). No Anton fallback —
+   TT Trailers is reserved for true display moments; everywhere
+   else uses Space Grotesk. If TT Trailers ever fails to load,
+   the stack falls back to Space Grotesk, never Anton.
+   ============================================================ */
+
+/* Space Grotesk (sans, 400/500 — Medium is the heaviest used) + Space Mono (mono) */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500&family=Space+Mono:wght@400;700&display=swap');
+
+/* TT Trailers — licensed display face (self-hosted in assets/fonts/).
+   SINGLE source of truth for this @font-face — lists both filename
+   conventions present in the project so deck + components share one face. */
+@font-face {
+  font-family: "TT Trailers";
+  src: url("../assets/fonts/TTTrailers-Bold.woff2") format("woff2"),
+       url("../assets/fonts/TT-Trailers-Bold.woff2") format("woff2"),
+       url("../assets/fonts/TTTrailers-Bold.woff") format("woff"),
+       url("../assets/fonts/TTTrailers-Bold.otf") format("opentype"),
+       url("../assets/fonts/TT-Trailers-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

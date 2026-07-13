@@ -1,0 +1,207 @@
+/* =========================================================
+   Redis Design Tokens
+   Source of truth — all colors, type, spacing, motion.
+   Mirror these in any Figma / JS / Tailwind config.
+   ========================================================= */
+
+:root {
+  /* ---------- Brand colors (Hyper — signature) ---------- */
+  --rd-hyper-01: #FFF3F2;
+  --rd-hyper-02: #FFDAD8;
+  --rd-hyper-03: #FFACA7;
+  --rd-hyper-04: #FD736A;
+  --rd-hyper-05: #FF4438;   /* BASE — primary brand */
+  --rd-hyper-06: #EB352A;
+  --rd-hyper-07: #E4291E;
+  --rd-hyper-08: #D1281E;   /* Rich */
+  --rd-hyper-09: #8A221C;
+  --rd-hyper-10: #351D22;
+
+  /* ---------- Midnight (deepest dark) ---------- */
+  --rd-midnight-base: #091A23;  /* primary dark surface */
+  --rd-midnight-02:   #07151C;
+
+  /* ---------- Dusk (cool gray-blue, neutrals) ---------- */
+  --rd-dusk-01: #F3F3F3;
+  --rd-dusk-02: #E9E9E9;
+  --rd-dusk-03: #D9D9D9;
+  --rd-dusk-04: #B9C2C6;
+  --rd-dusk-05: #8A99A0;
+  --rd-dusk-06: #5C707A;   /* Lightest */
+  --rd-dusk-07: #2D4754;   /* Light */
+  --rd-dusk-08: #163341;   /* BASE */
+  --rd-dusk-09: #0D212C;
+
+  /* ---------- Yellow (lime accent) ---------- */
+  --rd-yellow-01: #FEFFF5;
+  --rd-yellow-02: #F5FFC6;
+  --rd-yellow-03: #F1FFA8;
+  --rd-yellow-04: #E9FF72;
+  --rd-yellow-05: #DCFF1E;   /* BASE */
+  --rd-yellow-06: #D0F41D;   /* Deep */
+  --rd-yellow-07: #BFE112;
+  --rd-yellow-08: #A9CA03;
+  --rd-yellow-09: #8CAA00;
+
+  /* ---------- Purple (highlighter accent) ---------- */
+  --rd-purple-01: #F9F4FC;
+  --rd-purple-02: #F1E5FA;
+  --rd-purple-03: #E3CAF1;   /* Light */
+  --rd-purple-04: #C795E3;   /* BASE */
+  --rd-purple-05: #B76BE2;   /* Deep */
+  --rd-purple-06: #9C42CE;
+  --rd-purple-07: #8F2EC4;
+  --rd-purple-08: #7C1AB3;
+  --rd-purple-09: #592479;
+
+  /* ---------- Sky blue (highlighter accent) ---------- */
+  --rd-blue-01: #F2FBFF;
+  --rd-blue-02: #BFEDFF;   /* Light */
+  --rd-blue-03: #80DBFF;   /* BASE */
+  --rd-blue-04: #5ED1FF;   /* Deep */
+  --rd-blue-05: #33C2FB;
+  --rd-blue-06: #25B5EE;
+  --rd-blue-07: #0F9FD9;
+  --rd-blue-08: #0E8EC0;
+  --rd-blue-09: #0477A5;
+
+  /* ---------- Neutral grays (functional, not brand) ---------- */
+  --rd-gray-01: #FCFCFC;
+  --rd-gray-02: #F8F8F8;
+  --rd-gray-03: #E6E6E6;
+  --rd-gray-04: #D1D3D4;
+  --rd-gray-05: #BCBEC0;
+  --rd-gray-06: #A7A9AC;
+  --rd-gray-07: #939598;
+  --rd-gray-08: #6D6E71;
+  --rd-gray-09: #58595B;
+  --rd-gray-10: #414042;
+
+  --rd-white: #FFFFFF;
+  --rd-black: #000000;
+  --rd-black-02: #282828;
+  --rd-black-03: #2C2C2C;
+
+  /* ---------- Type families ----------
+     TT Trailers is a licensed commercial typeface for display ONLY
+     in marketing / web / social headlines. NOT for presentation
+     decks — the deck template uses Space Grotesk Medium 500 for all
+     headlines (covers, dividers, big stats included). It has
+     NO Anton fallback — reserve it for true marketing display
+     moments and use Space Grotesk (Medium 500 max — never
+     Bold/SemiBold) for headlines everywhere else.
+     HARD RULE: TT Trailers is ALWAYS all-caps — never lowercase or
+     mixed case. Apply it only via the `.rd-display` class (in
+     components.css), which binds it to text-transform: uppercase. */
+  --rd-font-display: "TT Trailers", "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --rd-font-sans:    "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --rd-font-mono:    "Space Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ---------- Type scale (px) ---------- */
+  --rd-text-xs:   12px;
+  --rd-text-sm:   14px;
+  --rd-text-base: 16px;
+  --rd-text-md:   18px;
+  --rd-text-lg:   20px;
+  --rd-text-xl:   24px;
+  --rd-text-2xl:  30px;
+  --rd-text-3xl:  40px;
+  --rd-text-4xl:  58px;
+  --rd-text-5xl:  80px;
+  --rd-text-display: 120px;
+
+  /* ---------- Spacing (4-pt grid) ---------- */
+  --rd-space-1:  4px;
+  --rd-space-2:  8px;
+  --rd-space-3:  12px;
+  --rd-space-4:  16px;
+  --rd-space-5:  20px;
+  --rd-space-6:  24px;
+  --rd-space-8:  32px;
+  --rd-space-10: 40px;
+  --rd-space-12: 48px;
+  --rd-space-16: 64px;
+  --rd-space-20: 80px;
+  --rd-space-24: 96px;
+  --rd-space-32: 128px;
+
+  /* ---------- Radii ---------- */
+  --rd-radius-xs: 2px;
+  --rd-radius-sm: 4px;
+  --rd-radius-md: 5px;
+  --rd-radius-lg: 8px;
+  --rd-radius-xl: 12px;
+  --rd-radius-pill: 999px;
+
+  /* ---------- Motion ---------- */
+  --rd-ease-out:  cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --rd-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* @kind other */
+  --rd-dur-fast:  120ms; /* @kind other */
+  --rd-dur-base:  200ms; /* @kind other */
+  --rd-dur-slow:  360ms; /* @kind other */
+
+  /* ---------- Layout ---------- */
+  --rd-container: 1280px;
+  --rd-sidebar-w: 260px;
+  --rd-topbar-h: 56px;
+}
+
+/* =========================================================
+   Semantic tokens — theme-aware
+   Light theme by default; .theme-dark overrides on body.
+   ========================================================= */
+:root {
+  /* surfaces */
+  --bg:        var(--rd-white);
+  --bg-elev:   var(--rd-gray-02);
+  --bg-sunken: var(--rd-dusk-01);
+  --surface-inverse: var(--rd-midnight-base);
+
+  /* text */
+  --fg:         var(--rd-midnight-base);
+  --fg-muted:   var(--rd-dusk-07);
+  --fg-subtle:  var(--rd-dusk-06);
+  --fg-inverse: var(--rd-white);
+
+  /* lines */
+  --border:        var(--rd-dusk-03);
+  --border-strong: var(--rd-dusk-05);
+
+  /* brand action */
+  --action:        var(--rd-hyper-05);
+  --action-hover:  var(--rd-hyper-06);
+  --action-press:  var(--rd-hyper-07);
+  --action-fg:     var(--rd-white);
+
+  /* accent */
+  --accent-yellow: var(--rd-yellow-05);
+  --accent-purple: var(--rd-purple-04);
+  --accent-blue:   var(--rd-blue-03);
+
+  /* state */
+  --focus-ring: var(--rd-hyper-05);
+
+  color-scheme: light;
+}
+
+.theme-dark {
+  --bg:        var(--rd-midnight-base);
+  --bg-elev:   var(--rd-dusk-09);
+  --bg-sunken: var(--rd-midnight-02);
+  --surface-inverse: var(--rd-white);
+
+  --fg:         var(--rd-white);
+  --fg-muted:   var(--rd-dusk-04);
+  --fg-subtle:  var(--rd-dusk-05);
+  --fg-inverse: var(--rd-midnight-base);
+
+  --border:        var(--rd-dusk-07);
+  --border-strong: var(--rd-dusk-06);
+
+  --action:        var(--rd-hyper-05);
+  --action-hover:  var(--rd-hyper-04);
+  --action-press:  var(--rd-hyper-06);
+  --action-fg:     var(--rd-white);
+
+  color-scheme: dark;
+}

@@ -1,0 +1,15 @@
+/* ============================================================
+   REDIS DESIGN SYSTEM — styles.css (root entry point)
+   Link this ONE file to get the whole system:
+
+     <link rel="stylesheet" href="styles.css">
+
+   Import order matters: fonts + tokens first (define variables),
+   then the legacy-alias bridge, then components. The deck slide
+   system (styles/deck.css) is heavy and deck-only — link it
+   directly in deck pages rather than pulling it into every page.
+   ============================================================ */
+@import url('styles/fonts.css');
+@import url('styles/tokens.css');
+@import url('styles/legacy-aliases.css');
+@import url('styles/components.css');

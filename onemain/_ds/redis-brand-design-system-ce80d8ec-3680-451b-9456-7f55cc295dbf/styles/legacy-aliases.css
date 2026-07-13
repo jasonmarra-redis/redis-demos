@@ -1,0 +1,129 @@
+/* ============================================================
+   LEGACY ALIASES — bridge layer
+   Maps the variable/class names used by earlier-built artifacts
+   (deck.css, UI kits, some preview cards) onto the REAL token
+   system in tokens.css. The real tokens + components.css are the
+   source of truth; this only keeps older references resolving.
+   New work should use the real tokens (--bg, --fg, --action…)
+   and real component classes directly.
+   ============================================================ */
+:root {
+  /* semantic color aliases → real semantic tokens (theme-aware via var()) */
+  --rd-bg: var(--bg);
+  --rd-bg-subtle: var(--bg-sunken);
+  --rd-surface: var(--bg);
+  --rd-surface-sunken: var(--bg-sunken);
+  --rd-line: var(--border);
+  --rd-line-strong: var(--border-strong);
+  --rd-fg: var(--fg);
+  --rd-fg-muted: var(--fg-muted);
+  --rd-fg-subtle: var(--fg-subtle);
+  --rd-fg-on-dark: var(--rd-white);
+  --rd-fg-on-hyper: var(--action-fg);
+  --rd-action: var(--action);
+  --rd-action-hover: var(--action-hover);
+  --rd-action-press: var(--action-press);
+  --rd-focus: var(--focus-ring);
+  --rd-accent: var(--accent-yellow);
+
+  /* type aliases → real type scale */
+  --rd-text-h1: var(--rd-text-4xl);
+  --rd-text-h2: var(--rd-text-3xl);
+  --rd-text-h3: var(--rd-text-2xl);
+  --rd-text-h4: var(--rd-text-xl);
+  --rd-text-lead: var(--rd-text-lg);
+  --rd-text-body: var(--rd-text-base);
+  --rd-text-small: var(--rd-text-sm);
+  --rd-text-eyebrow: var(--rd-text-xs);
+  --rd-leading-tight: 1.02;
+  --rd-leading-snug: 1.15;
+  --rd-leading-normal: 1.5;
+  --rd-track-display: -0.02em;
+  --rd-track-eyebrow: 0.12em;
+  --rd-weight-regular: 400;
+  --rd-weight-medium: 500;
+  /* No bold/semibold for Space Grotesk — Medium (500) is the heaviest weight in the system. */
+
+  /* spacing steps not present in the real scale */
+  --rd-space-0: 0;
+  --rd-space-7: 48px;
+  --rd-space-9: 96px;
+
+  /* easing alias (real file only ships ease-out / ease-in-out) */
+  --rd-ease-standard: var(--rd-ease-out);
+
+  /* the real system uses borders, not shadows, on cards;
+     these remain only for legacy artifacts that referenced them */
+  --rd-shadow-sm: 0 1px 2px rgba(9,26,35,0.06);
+  --rd-shadow-md: 0 4px 12px rgba(9,26,35,0.08);
+  --rd-shadow-lg: 0 24px 48px rgba(9,26,35,0.18);
+  --rd-shadow-hyper: 0 8px 24px rgba(255,68,56,0.28);
+
+  /* deck safe edge */
+  --rd-deck-safe: 120px;
+}
+
+/* ---- legacy element helper classes ---- */
+.rd-root, body.rd-root {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.rd-eyebrow {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+/* legacy button size + variants → real equivalents */
+.rd-btn--small { font-size: 12px; padding: 10px 20px; }
+.rd-btn--icon { padding: 12px; }
+
+/* legacy card hover */
+.rd-card--interactive { cursor: pointer; }
+.rd-card--interactive:hover { border-color: var(--fg); }
+
+/* legacy tag accent → yellow */
+.rd-tag--accent { background: var(--rd-yellow-05); color: var(--rd-midnight-base); border-color: transparent; }
+
+/* legacy CTA bar → real CTA */
+.rd-cta-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--rd-space-8);
+  background: var(--rd-midnight-base); color: var(--rd-white);
+  border-radius: var(--rd-radius-xl); padding: var(--rd-space-12);
+}
+
+/* legacy toast accent */
+.rd-toast--hyper { border-left-color: var(--rd-hyper-05); }
+
+/* legacy form label */
+.rd-label {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+/* legacy code block → mirrors real .rd-code visual */
+.rd-code-block {
+  display: block;
+  font-family: var(--rd-font-mono);
+  background: var(--rd-midnight-base);
+  color: var(--rd-white);
+  border-radius: var(--rd-radius-md);
+  padding: var(--rd-space-5) var(--rd-space-6);
+  font-size: 14px; line-height: 1.6;
+  overflow: auto;
+}
+.rd-code-block .tok-key, .rd-code-block .tok-kw  { color: var(--rd-purple-04); }
+.rd-code-block .tok-str { color: var(--rd-yellow-05); }
+.rd-code-block .tok-num { color: var(--rd-blue-03); }
+.rd-code-block .tok-fn  { color: var(--rd-hyper-04); }
+.rd-code-block .tok-com { color: var(--rd-dusk-05); font-style: italic; }
